@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -40,3 +41,18 @@ def create_refresh_token(subject: str) -> str:
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+
+
+# SECURITY FIX: hash refresh tokens before storing in database.
+def hash_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+# SECURITY FIX: normalize JWT exp claim to timezone-aware datetime.
+def token_exp_to_datetime(payload: dict) -> datetime:
+    exp = payload.get("exp")
+    if isinstance(exp, datetime):
+        return exp if exp.tzinfo else exp.replace(tzinfo=timezone.utc)
+    if isinstance(exp, (int, float)):
+        return datetime.fromtimestamp(exp, tz=timezone.utc)
+    raise ValueError("Invalid token exp claim")

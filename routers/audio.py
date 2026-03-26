@@ -1,10 +1,15 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Form, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
 from dependencies.auth import get_current_user
 from services.gemini import process_audio
+from services.upload_security import MAX_AUDIO_BYTES, read_upload_with_limit
+
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api",
@@ -33,7 +38,8 @@ async def process(
     except Exception:
         gps_points = []
 
-    file_content = await audio.read()
+    # SECURITY FIX: file size limit to prevent DoS via large uploads
+    file_content = await read_upload_with_limit(audio, MAX_AUDIO_BYTES, 10)
 
     try:
         plates = await process_audio(
@@ -45,7 +51,12 @@ async def process(
             sheet_name=sheet_name.strip(),
             gps_points=gps_points,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # SECURITY FIX: hiding internal exception details from client
+        logger.exception("Audio processing failed")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred. Please try again.",
+        )
 
     return JSONResponse({"plates": plates, "total": len(plates)})

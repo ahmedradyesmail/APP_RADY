@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 from datetime import datetime
 
 import openpyxl
@@ -16,6 +17,10 @@ from services.excel_utils import (
     apply_excel_style,
     workbook_to_bytes,
 )
+from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
+
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api",
@@ -38,7 +43,8 @@ async def parse_gps_excel(
     gps_col:   str        = Form("GPS"),
     label_cols_json: str  = Form(""),
 ):
-    content = await file.read()
+    # SECURITY FIX: file size limit to prevent DoS via large uploads
+    content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
     try:
         wb   = openpyxl.load_workbook(
             io.BytesIO(content), read_only=True, data_only=True
@@ -137,8 +143,13 @@ async def parse_gps_excel(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # SECURITY FIX: hiding internal exception details from client
+        logger.exception("Failed parsing GPS excel")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred. Please try again.",
+        )
 
 
 @router.post("/check-gps-data")
@@ -151,13 +162,20 @@ async def check_gps_data(
     large_sheet: str        = Form(""),
     small_sheet: str        = Form(""),
 ):
-    lc_bytes = await large_file.read()
-    sc_bytes = await small_file.read()
+    # SECURITY FIX: file size limit to prevent DoS via large uploads
+    lc_bytes = await read_upload_with_limit(large_file, MAX_EXCEL_BYTES, 30)
+    # SECURITY FIX: file size limit to prevent DoS via large uploads
+    sc_bytes = await read_upload_with_limit(small_file, MAX_EXCEL_BYTES, 30)
 
     try:
         large_wb = load_workbook_maybe_encrypted(lc_bytes, password.strip())
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        # SECURITY FIX: hiding internal exception details from client
+        logger.exception("Failed to open encrypted large workbook in GPS check")
+        raise HTTPException(
+            status_code=400,
+            detail="An internal error occurred. Please try again.",
+        )
 
     try:
         small_wb = openpyxl.load_workbook(
@@ -282,7 +300,8 @@ async def parse_ref_plates(
     file: UploadFile = File(...),
     col:  str        = Form(""),
 ):
-    content = await file.read()
+    # SECURITY FIX: file size limit to prevent DoS via large uploads
+    content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
     try:
         wb      = openpyxl.load_workbook(
             io.BytesIO(content), read_only=True, data_only=True
@@ -326,8 +345,13 @@ async def parse_ref_plates(
             "col_used": headers[col_idx],
         })
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # SECURITY FIX: hiding internal exception details from client
+        logger.exception("Failed parsing reference plates")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred. Please try again.",
+        )
 
 
 @router.post("/check-ref-plate")
@@ -341,7 +365,8 @@ async def check_ref_plate(
     if not norm_target:
         raise HTTPException(status_code=400, detail="أدخل رقم لوحة صحيح")
 
-    content = await file.read()
+    # SECURITY FIX: file size limit to prevent DoS via large uploads
+    content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
     try:
         wb = openpyxl.load_workbook(
             io.BytesIO(content), read_only=True, data_only=True
@@ -400,8 +425,13 @@ async def check_ref_plate(
         })
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # SECURITY FIX: hiding internal exception details from client
+        logger.exception("Failed checking single reference plate")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred. Please try again.",
+        )
 
 
 @router.post("/export-gps-excel")

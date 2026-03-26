@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 from datetime import datetime
 
 import openpyxl
@@ -10,7 +11,11 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from dependencies.auth import get_current_user
 from services.plate_utils import normalize_plate_value
 from services.excel_utils import apply_excel_style, workbook_to_bytes
+from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
 from urllib.parse import quote
+
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api",
@@ -223,7 +228,8 @@ async def parse_excel(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="لم يتم رفع ملف")
 
     try:
-        content = await file.read()
+        # SECURITY FIX: file size limit to prevent DoS via large uploads
+        content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
         wb = openpyxl.load_workbook(
             io.BytesIO(content), read_only=True, data_only=True
         )
@@ -265,5 +271,10 @@ async def parse_excel(file: UploadFile = File(...)):
 
         return JSONResponse({"rows": rows_out, "total": len(rows_out)})
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # SECURITY FIX: hiding internal exception details from client
+        logger.exception("Failed parsing excel upload")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred. Please try again.",
+        )

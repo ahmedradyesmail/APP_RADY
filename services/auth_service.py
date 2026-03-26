@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from models import User
+from models import RefreshToken, User
 from services.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
     hash_password,
+    hash_token,
+    token_exp_to_datetime,
     verify_password,
 )
 
@@ -47,9 +50,22 @@ def login(
             raise AuthServiceError(status_code=403, detail="This account is linked to another device")
 
     subject = str(user.id)
+    # SECURITY FIX: refresh token rotation with DB validation.
+    refresh_token = create_refresh_token(subject)
+    refresh_payload = decode_token(refresh_token)
+    db.add(
+        RefreshToken(
+            token_hash=hash_token(refresh_token),
+            user_id=user.id,
+            device_id=device_id,
+            expires_at=token_exp_to_datetime(refresh_payload),
+            is_revoked=False,
+        )
+    )
+    db.commit()
     return (
         create_access_token(subject),
-        create_refresh_token(subject),
+        refresh_token,
         user.is_admin,
     )
 
@@ -83,10 +99,41 @@ def refresh(
     if not user.is_admin and user.device_id != device_id:
         raise AuthServiceError(status_code=403, detail="Token refresh not allowed from this device")
 
+    # SECURITY FIX: refresh token rotation with DB validation.
+    token_hash = hash_token(refresh_token)
+    token_row = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token_hash == token_hash)
+        .first()
+    )
+    if token_row is None:
+        raise AuthServiceError(status_code=401, detail="Invalid refresh token")
+    if token_row.is_revoked:
+        raise AuthServiceError(status_code=401, detail="Invalid refresh token")
+    if token_row.user_id != user.id:
+        raise AuthServiceError(status_code=401, detail="Invalid refresh token")
+    if token_row.device_id != device_id:
+        raise AuthServiceError(status_code=401, detail="Invalid refresh token")
+
     user_subject = str(user.id)
+    # SECURITY FIX: refresh token rotation with DB validation.
+    token_row.is_revoked = True
+    next_refresh_token = create_refresh_token(user_subject)
+    next_payload = decode_token(next_refresh_token)
+    db.add(
+        RefreshToken(
+            token_hash=hash_token(next_refresh_token),
+            user_id=user.id,
+            device_id=device_id,
+            expires_at=token_exp_to_datetime(next_payload),
+            is_revoked=False,
+        )
+    )
+    db.add(token_row)
+    db.commit()
     return (
         create_access_token(user_subject),
-        create_refresh_token(user_subject),
+        next_refresh_token,
         user.is_admin,
     )
 
@@ -131,6 +178,13 @@ def set_user_active(
 
     target.is_active = is_active
     db.add(target)
+    # SECURITY FIX: refresh token rotation with DB validation.
+    if not is_active:
+        db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == target.id)
+            .values(is_revoked=True)
+        )
     db.commit()
     db.refresh(target)
     return target
@@ -150,4 +204,23 @@ def reset_user_device(
     db.commit()
     db.refresh(target)
     return target
+
+
+# SECURITY FIX: refresh token rotation with DB validation.
+def revoke_user_device_tokens(
+    *,
+    db: Session,
+    user_id: int,
+    device_id: str,
+) -> None:
+    db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.device_id == device_id,
+            RefreshToken.is_revoked == False,  # noqa: E712
+        )
+        .values(is_revoked=True)
+    )
+    db.commit()
 

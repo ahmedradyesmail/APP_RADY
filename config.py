@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     admin_username: str = "admin"
     admin_password: str = "admin123"
+    # SECURITY FIX: browser CORS origins loaded from environment.
+    allowed_origins: str = ""
+
+    # SECURITY FIX: parse comma-separated ALLOWED_ORIGINS once.
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        return [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
 
     class Config:
         extra = "ignore"

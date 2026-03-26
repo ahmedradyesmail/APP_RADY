@@ -833,7 +833,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     </div>
     <div class="tbl-outer" style="margin-bottom:1rem">
       <table>
-        <thead><tr><th>#</th><th>رقم اللوحة &#x2705;</th><th>نوع المركبة</th><th>الشارع</th><th>تفاصيل الموقع</th><th>اسم المسجّل</th><th>تاريخ التسجيل</th><th>GPS</th><th>موقع الشارع</th></tr></thead>
+        <thead><tr><th>#</th><th>رقم اللوحة &#x2705;</th><th>خريطة</th><th>نوع المركبة</th><th>الشارع</th><th>تفاصيل الموقع</th><th>اسم المسجّل</th><th>تاريخ التسجيل</th><th>GPS</th><th>موقع الشارع</th></tr></thead>
         <tbody id="fcMatchedBody"></tbody>
       </table>
     </div>
@@ -1101,6 +1101,7 @@ let fcRecState='idle',fcMediaRec=null,fcAllChunks=[],fcCurChunks=[];
 let fcLiveBlob=null,fcAudioUrl=null;
 let fcGpsPoints=[],fcAutoTimer=null,fcRecTimer=null,fcRecSecs=0,fcGpsMode='auto';
 let fcRefFile=null,fcRefPlates=[],fcExtractedRows=[],fcMatchedRows=[];
+let fcLastMyLatLng=null; // origin lat,lng from last recording (for directions links)
 let fcAllRows=[];  // cumulative across all recordings
 let gmapsFile=null,gmMap=null,gmMarkers=[],gmMapsApiPromise=null;
 let gmUserMarker=null,gmUserWatchId=null;
@@ -2670,6 +2671,33 @@ function normPlate(s){
   return s.toLowerCase();
 }
 
+function fcMidLatLngStr(points){
+  if(!points||!points.length) return null;
+  const midIdx=Math.floor((points.length-1)/2);
+  const p=points[midIdx];
+  if(!p||p.lat==null||p.lng==null) return null;
+  return String(p.lat)+','+String(p.lng);
+}
+
+function fcParseLatLng(gpsStr){
+  if(!gpsStr) return null;
+  const s=String(gpsStr).trim();
+  if(!s.includes(',')) return null;
+  const parts=s.split(',');
+  if(parts.length<2) return null;
+  const lat=parseFloat(parts[0].trim());
+  const lng=parseFloat(parts[1].trim());
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)) return null;
+  return {lat,lng};
+}
+
+function fcBuildGoogleMapsDirUrl(originLatLngStr, destLatLngStr){
+  const o=fcParseLatLng(originLatLngStr);
+  const d=fcParseLatLng(destLatLngStr);
+  if(!o||!d) return '';
+  return 'https://www.google.com/maps/dir/'+o.lat+','+o.lng+'/'+d.lat+','+d.lng;
+}
+
 async function fcDoCheck(){
   if(!fcLiveBlob){fcShowStatus('err','لا يوجد تسجيل — سجّل صوتاً أولاً');return;}
   const apiKey=getApiKey();
@@ -2705,6 +2733,7 @@ async function fcDoCheck(){
 
   fcAllRows=[...fcAllRows,...newRows];
   fcExtractedRows=newRows;
+  fcLastMyLatLng = fcMidLatLngStr(fcGpsPoints);
   saveFcData();
   fcRenderExtracted();
   document.getElementById('fcExtractedSection').style.display='';
@@ -2796,12 +2825,18 @@ function fcRenderExtracted(){
 function fcRenderMatched(){
   const body=document.getElementById('fcMatchedBody');body.innerHTML='';
   const streetLoc = midGpsValue(fcMatchedRows);
+  const originLatLngStr = fcLastMyLatLng;
   fcMatchedRows.forEach((row,i)=>{
     const tr=document.createElement('tr');
     const gps=String(row.gps||'').trim();
+    const mapsUrl = (originLatLngStr && gps) ? fcBuildGoogleMapsDirUrl(originLatLngStr, gps) : '';
+    const mapCell = mapsUrl
+      ? '<a class="maps-link" href="'+mapsUrl+'" target="_blank" rel="noopener">&#x1F5FA;&#xFE0F; فتح الخريطة</a>'
+      : '—';
     tr.innerHTML=
       '<td class="td-num">'+(i+1)+'</td>'+
       '<td><span class="td-plate matched">'+esc(row.full_plate||'')+'</span></td>'+
+      '<td>'+mapCell+'</td>'+
       '<td>'+esc(row.vehicle_type||'')+'</td>'+
       '<td>'+esc(row.street_name||'')+'</td>'+
       '<td class="td-locdetails" style="font-size:.78rem;color:var(--dim2)">'+esc(row.location_details||'')+'</td>'+
@@ -2848,6 +2883,7 @@ function fcClearAll(){
   if(!fcAllRows.length)return;
   if(!confirm('هل تريد مسح كل اللوحات المسجّلة؟'))return;
   fcAllRows=[];fcExtractedRows=[];fcMatchedRows=[];
+  fcLastMyLatLng=null;
   saveFcData();
   document.getElementById('fcExtractedSection').style.display='none';
   document.getElementById('fcResultSection').style.display='none';
@@ -2907,6 +2943,7 @@ function saveFcData(){
     localStorage.setItem('fcAllRows_v5',JSON.stringify(fcAllRows));
     localStorage.setItem('fcMatchedRows_v5',JSON.stringify(fcMatchedRows));
     localStorage.setItem('fcExtractedRows_v5',JSON.stringify(fcExtractedRows));
+    localStorage.setItem('fcLastMyLatLng_v5',fcLastMyLatLng||'');
   }catch(e){}
 }
 function loadFcData(){
@@ -2914,9 +2951,11 @@ function loadFcData(){
     const al=localStorage.getItem('fcAllRows_v5');
     const ex=localStorage.getItem('fcExtractedRows_v5');
     const mx=localStorage.getItem('fcMatchedRows_v5');
+    const ml=localStorage.getItem('fcLastMyLatLng_v5');
     if(al)fcAllRows=JSON.parse(al);
     if(ex)fcExtractedRows=JSON.parse(ex);
     if(mx)fcMatchedRows=JSON.parse(mx);
+    fcLastMyLatLng = ml ? String(ml) : null;
     if(fcAllRows.length){
       fcRenderExtracted();
       document.getElementById('fcExtractedSection').style.display='';
