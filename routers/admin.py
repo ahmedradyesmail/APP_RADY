@@ -17,7 +17,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 @router.post("/users", response_model=UserOut)
-def create_user(
+async def create_user(
     payload: CreateUserRequest,
     _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -34,7 +34,7 @@ def create_user(
 
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(
+async def list_users(
     _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -42,7 +42,7 @@ def list_users(
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
-def update_user_active(
+async def update_user_active(
     user_id: int,
     payload: UserActiveUpdate,
     admin: User = Depends(require_admin),
@@ -55,7 +55,7 @@ def update_user_active(
 
 
 @router.post("/users/{user_id}/reset-device", response_model=UserOut)
-def reset_device(
+async def reset_device(
     user_id: int,
     _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -67,7 +67,7 @@ def reset_device(
 
 
 @router.delete("/users/{user_id}")
-def delete_user(
+async def delete_user(
     user_id: int,
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),

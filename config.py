@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # SECURITY FIX: browser CORS origins loaded from environment.
     allowed_origins: str = ""
 
+    # Optional: shared job status for multi-worker (Gunicorn). If unset, in-memory per worker.
+    redis_url: str | None = None
+
     # SECURITY FIX: parse comma-separated ALLOWED_ORIGINS once.
     @property
     def allowed_origins_list(self) -> list[str]:

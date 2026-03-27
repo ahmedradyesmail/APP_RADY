@@ -1,22 +1,27 @@
-import io
+import asyncio
+import base64
 import logging
-from datetime import datetime
 
-import openpyxl
-from fastapi import APIRouter, Depends, Form, File, UploadFile, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 
 from dependencies.auth import get_current_user
-from services.plate_utils import normalize_plate, auto_detect_plate_col
+from services.check_match import run_check_plates_sync
 from services.excel_utils import (
-    load_workbook_maybe_encrypted,
-    find_best_sheet,
-    apply_excel_style,
-    workbook_to_bytes,
+    find_best_sheet_async,
+    load_workbook_from_bytes_async,
+    load_workbook_maybe_encrypted_async,
 )
+from services.job_store import (
+    TTL_PROCESSING_SEC,
+    TTL_TERMINAL_SEC,
+    job_get,
+    job_save,
+    new_job_id,
+    schedule_job_cleanup,
+)
+from services.plate_utils import auto_detect_plate_col
 from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
-
-from urllib.parse import quote
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +43,7 @@ def _get_headers(ws) -> list[str]:
 async def check_headers(
     large_file: UploadFile | None = File(None),
     small_file: UploadFile | None = File(None),
-    password:   str               = Form(""),
+    password: str = Form(""),
 ):
     result = {}
 
@@ -46,12 +51,12 @@ async def check_headers(
         try:
             # SECURITY FIX: file size limit to prevent DoS via large uploads
             content = await read_upload_with_limit(large_file, MAX_EXCEL_BYTES, 30)
-            wb      = load_workbook_maybe_encrypted(content, password.strip())
-            ws      = find_best_sheet(wb)
+            wb = await load_workbook_maybe_encrypted_async(content, password.strip())
+            ws = await find_best_sheet_async(wb)
             headers = _get_headers(ws)
             result["large"] = {
-                "headers":    headers,
-                "detected":   auto_detect_plate_col(headers),
+                "headers": headers,
+                "detected": auto_detect_plate_col(headers),
                 "sheet_name": ws.title,
                 "all_sheets": wb.sheetnames,
             }
@@ -62,14 +67,12 @@ async def check_headers(
         try:
             # SECURITY FIX: file size limit to prevent DoS via large uploads
             content = await read_upload_with_limit(small_file, MAX_EXCEL_BYTES, 30)
-            wb      = openpyxl.load_workbook(
-                io.BytesIO(content), read_only=True, data_only=True
-            )
-            ws      = find_best_sheet(wb)
+            wb = await load_workbook_from_bytes_async(content)
+            ws = await find_best_sheet_async(wb)
             headers = _get_headers(ws)
             result["small"] = {
-                "headers":    headers,
-                "detected":   auto_detect_plate_col(headers),
+                "headers": headers,
+                "detected": auto_detect_plate_col(headers),
                 "sheet_name": ws.title,
                 "all_sheets": wb.sheetnames,
             }
@@ -79,163 +82,129 @@ async def check_headers(
     return JSONResponse(result)
 
 
+async def _check_job_task(
+    job_id: str,
+    lc_bytes: bytes,
+    sc_bytes: bytes,
+    password: str,
+    large_col: str,
+    small_col: str,
+    large_sheet: str,
+    small_sheet: str,
+) -> None:
+    try:
+        raw = await asyncio.to_thread(
+            run_check_plates_sync,
+            lc_bytes,
+            sc_bytes,
+            password,
+            large_col,
+            small_col,
+            large_sheet,
+            small_sheet,
+        )
+        if raw["kind"] == "xlsx":
+            await job_save(
+                job_id,
+                {
+                    "status": "done",
+                    "data": {
+                        "kind": "xlsx",
+                        "filename": raw["filename"],
+                        "content_b64": base64.b64encode(raw["content"]).decode("ascii"),
+                    },
+                },
+                ttl_seconds=TTL_TERMINAL_SEC,
+            )
+        else:
+            await job_save(
+                job_id,
+                {
+                    "status": "done",
+                    "data": {
+                        "kind": "json",
+                        "status_code": raw["status_code"],
+                        "body": raw["body"],
+                    },
+                },
+                ttl_seconds=TTL_TERMINAL_SEC,
+            )
+    except ValueError as e:
+        msg = str(e)
+        if "فشل فك تشفير" in msg or "فشل فك" in msg:
+            logger.exception("Failed to open encrypted large workbook")
+            await job_save(
+                job_id,
+                {
+                    "status": "error",
+                    "data": None,
+                    "detail": "An internal error occurred. Please try again.",
+                },
+                ttl_seconds=TTL_TERMINAL_SEC,
+            )
+        else:
+            await job_save(
+                job_id,
+                {
+                    "status": "error",
+                    "data": None,
+                    "detail": msg,
+                },
+                ttl_seconds=TTL_TERMINAL_SEC,
+            )
+    except Exception:
+        logger.exception("Check plates job failed")
+        await job_save(
+            job_id,
+            {
+                "status": "error",
+                "data": None,
+                "detail": "An internal error occurred. Please try again.",
+            },
+            ttl_seconds=TTL_TERMINAL_SEC,
+        )
+    schedule_job_cleanup(job_id)
+
+
 @router.post("/check")
 async def check_plates(
-    large_file:  UploadFile = File(...),
-    small_file:  UploadFile = File(...),
-    password:    str        = Form(""),
-    large_col:   str        = Form(""),
-    small_col:   str        = Form(""),
-    large_sheet: str        = Form(""),
-    small_sheet: str        = Form(""),
+    background_tasks: BackgroundTasks,
+    large_file: UploadFile = File(...),
+    small_file: UploadFile = File(...),
+    password: str = Form(""),
+    large_col: str = Form(""),
+    small_col: str = Form(""),
+    large_sheet: str = Form(""),
+    small_sheet: str = Form(""),
 ):
     # SECURITY FIX: file size limit to prevent DoS via large uploads
     lc_bytes = await read_upload_with_limit(large_file, MAX_EXCEL_BYTES, 30)
     # SECURITY FIX: file size limit to prevent DoS via large uploads
     sc_bytes = await read_upload_with_limit(small_file, MAX_EXCEL_BYTES, 30)
 
-    try:
-        large_wb = load_workbook_maybe_encrypted(lc_bytes, password.strip())
-    except ValueError:
-        # SECURITY FIX: hiding internal exception details from client
-        logger.exception("Failed to open encrypted large workbook")
-        raise HTTPException(
-            status_code=400,
-            detail="An internal error occurred. Please try again.",
-        )
-
-    try:
-        small_wb = openpyxl.load_workbook(
-            io.BytesIO(sc_bytes), read_only=True, data_only=True
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"تعذّر فتح الملف الصغير: {e}")
-
-    large_ws = (
-        large_wb[large_sheet]
-        if large_sheet and large_sheet in large_wb.sheetnames
-        else find_best_sheet(large_wb)
+    job_id = new_job_id()
+    await job_save(
+        job_id,
+        {"status": "processing", "data": None},
+        ttl_seconds=TTL_PROCESSING_SEC,
     )
-    small_ws = (
-        small_wb[small_sheet]
-        if small_sheet and small_sheet in small_wb.sheetnames
-        else find_best_sheet(small_wb)
+    background_tasks.add_task(
+        _check_job_task,
+        job_id,
+        lc_bytes,
+        sc_bytes,
+        password.strip(),
+        large_col.strip(),
+        small_col.strip(),
+        large_sheet.strip(),
+        small_sheet.strip(),
     )
-
-    ld = list(large_ws.iter_rows(values_only=True))
-    if not ld:
-        raise HTTPException(status_code=400, detail="الملف الكبير فارغ")
-
-    lh = [str(h).strip() if h is not None else "" for h in ld[0]]
-    lc = large_col.strip() or auto_detect_plate_col(lh)
-
-    if not lc or lc not in lh:
-        return JSONResponse(
-            status_code=422,
-            content={
-                "detail":  (
-                    f"لم يُعثر على عمود اللوحة في الملف الكبير "
-                    f"(شيت: {large_ws.title}). الأعمدة: {lh}"
-                ),
-                "headers": lh,
-                "code":    "COL_NOT_FOUND_LARGE",
-            },
-        )
-
-    lci    = lh.index(lc)
-    lookup = {}
-    for row in ld[1:]:
-        if all(v is None for v in row):
-            continue
-        rp   = row[lci] if lci < len(row) else None
-        norm = normalize_plate(rp)
-        if not norm:
-            continue
-        rd = {lh[i]: (row[i] if i < len(row) else None) for i in range(len(lh))}
-        lookup.setdefault(norm, []).append(rd)
-
-    sd = list(small_ws.iter_rows(values_only=True))
-    if not sd:
-        raise HTTPException(status_code=400, detail="الملف الصغير فارغ")
-
-    sh = [str(h).strip() if h is not None else "" for h in sd[0]]
-    sc = small_col.strip() or auto_detect_plate_col(sh)
-
-    if not sc or sc not in sh:
-        return JSONResponse(
-            status_code=422,
-            content={
-                "detail":  f"لم يُعثر على عمود اللوحة في الملف الصغير. الأعمدة: {sh}",
-                "headers": sh,
-                "code":    "COL_NOT_FOUND_SMALL",
-            },
-        )
-
-    sci     = sh.index(sc)
-    matched = []
-    mp      = []
-    up      = []
-
-    for row in sd[1:]:
-        if all(v is None for v in row):
-            continue
-        rp   = row[sci] if sci < len(row) else None
-        norm = normalize_plate(rp)
-        if not norm:
-            continue
-        if norm in lookup:
-            matched.extend(lookup[norm])
-            mp.append(str(rp or "").strip())
-        else:
-            up.append(str(rp or "").strip())
-
-    if not matched:
-        return JSONResponse({
-            "detail":        "لا توجد تطابقات بين الملفين",
-            "matched":       0,
-            "unmatched":     len(up),
-            "large_col_used": lc,
-            "small_col_used": sc,
-        })
-
-    # Build output workbook
-    wb_out = openpyxl.Workbook()
-    ws_m   = wb_out.active
-    ws_m.title = "التطابقات"
-    apply_excel_style(ws_m, lh, matched)
-
-    ws_s = wb_out.create_sheet("ملخص")
-    apply_excel_style(ws_s, ["البند", "القيمة"], [
-        {"البند": "إجمالي صفوف مُطابَقة", "القيمة": len(matched)},
-        {"البند": "لوحات مطابَقة",         "القيمة": len(mp)},
-        {"البند": "لوحات غير مطابَقة",     "القيمة": len(up)},
-        {"البند": "عمود الملف الكبير",      "القيمة": lc},
-        {"البند": "عمود الملف الصغير",      "القيمة": sc},
-    ])
-
-    if up:
-        ws_u = wb_out.create_sheet("غير مطابَقة")
-        apply_excel_style(
-            ws_u,
-            ["رقم اللوحة (غير مطابق)"],
-            [{"رقم اللوحة (غير مطابق)": p} for p in up],
-        )
-
-    content  = workbook_to_bytes(wb_out)
-    ts       = datetime.now().strftime("%Y%m%d_%H%M")
-    
+    return JSONResponse({"job_id": job_id, "status": "processing"})
 
 
-
-
-
-    filename = f"التطابقات_{ts}.xlsx"
-    encoded_filename = quote(filename, safe='')
-
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type=(
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
- )
+@router.get("/check/status/{job_id}")
+async def check_status(job_id: str):
+    row = await job_get(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return JSONResponse(row)

@@ -18,14 +18,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/me", response_model=MeOut)
-def me(current: User = Depends(get_current_user)):
+async def me(current: User = Depends(get_current_user)):
     return MeOut(username=current.username, is_admin=current.is_admin)
 
 
 @router.post("/login", response_model=TokenResponse)
 # SECURITY FIX: rate limited to prevent brute-force
 @limiter.limit("5/minute")
-def login(
+async def login(
     request: Request,
     payload: LoginRequest,
     x_device_id: str = Depends(require_device_header),
@@ -47,7 +47,7 @@ def login(
 @router.post("/refresh", response_model=TokenResponse)
 # SECURITY FIX: rate limited to prevent brute-force
 @limiter.limit("10/minute")
-def refresh_token(
+async def refresh_token(
     request: Request,
     payload: RefreshRequest,
     x_device_id: str = Depends(require_device_header),
@@ -66,7 +66,7 @@ def refresh_token(
 
 
 @router.post("/logout")
-def logout(
+async def logout(
     _request: Request,
     current: User = Depends(get_current_user),
     x_device_id: str = Depends(require_device_header),

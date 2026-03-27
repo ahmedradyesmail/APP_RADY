@@ -1113,7 +1113,37 @@ let gmFollowEnabled=false;
 let gmHasUserZoomed=false;
 let gmHeadersLoaded=false;
 const audioEls={live:null,up:null,fc:null};
+const FIRST_PERM_ASKED_KEY='firstVisitPermAsked_v1';
+const MIC_PERM_GRANTED_KEY='micPermGranted_v1';
+const GEO_PERM_GRANTED_KEY='geoPermGranted_v1';
 // ── Init ──────────────────────────────────────────────
+async function requestFirstVisitPermissions(){
+  // Ask only once per browser/device.
+  if(localStorage.getItem(FIRST_PERM_ASKED_KEY)==='1') return;
+  localStorage.setItem(FIRST_PERM_ASKED_KEY,'1');
+
+  try{
+    if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      stream.getTracks().forEach(t=>t.stop());
+      localStorage.setItem(MIC_PERM_GRANTED_KEY,'1');
+    }
+  }catch(_e){ localStorage.setItem(MIC_PERM_GRANTED_KEY,'0'); }
+
+  try{
+    if(navigator.geolocation){
+      await new Promise((resolve,reject)=>{
+        navigator.geolocation.getCurrentPosition(resolve,reject,{
+          enableHighAccuracy:true,timeout:12000,maximumAge:0
+        });
+      });
+      localStorage.setItem(GEO_PERM_GRANTED_KEY,'1');
+    }else{
+      localStorage.setItem(GEO_PERM_GRANTED_KEY,'0');
+    }
+  }catch(_e){ localStorage.setItem(GEO_PERM_GRANTED_KEY,'0'); }
+}
+
 window.addEventListener('DOMContentLoaded',()=>{
   audioEls.live=document.getElementById('liveAudio');
   audioEls.up=document.getElementById('upAudio');
@@ -1126,6 +1156,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   loadPersistedCheckFiles();
   setMode('auto');
   if(localStorage.getItem('theme')==='light')applyTheme('light');
+  requestFirstVisitPermissions();
 });
 // ── Global settings ───────────────────────────────────
 function onGlobalChange(){ checkReady(); fcCheckReady(); }
@@ -1773,6 +1804,15 @@ function _beep(freqs,dur=0.18,vol=0.25){try{const ctx=new(window.AudioContext||w
 function playPinSound(){_beep([[880,0],[440,0.1]]);}
 function playStartSound(){_beep([[440,0],[660,0.1]]);}
 function playStopSound(){_beep([[660,0],[440,0.1]]);}
+async function getMicStreamOrThrow(){
+  if(!window.isSecureContext){
+    throw new Error('يلزم HTTPS (أو localhost) لاستخدام الميكروفون');
+  }
+  if(!navigator.mediaDevices||typeof navigator.mediaDevices.getUserMedia!=='function'){
+    throw new Error('المتصفح لا يدعم getUserMedia في هذا السياق');
+  }
+  return navigator.mediaDevices.getUserMedia({audio:true});
+}
 // ── Tafrigh recording ─────────────────────────────────
 function onRecBtnClick(){if(recState==='idle')startFreshRec();else if(recState==='recording')stopRec();}
 async function startFreshRec(){allChunks=[];curChunks=[];liveGps=[];recSecs=0;liveBlob=null;liveAudioUrl=null;document.getElementById('pinCount').textContent='0 نقطة';document.getElementById('gLog').innerHTML='';document.getElementById('convertingLbl').classList.remove('show');await doStartRec();}
@@ -1780,7 +1820,7 @@ async function continueRec(){curChunks=[];hideChoices();await doStartRec();}
 function startNewRec(){hideChoices();startFreshRec();}
 async function doStartRec(){
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const stream=await getMicStreamOrThrow();
     const mime=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','audio/mp4'].find(t=>MediaRecorder.isTypeSupported(t))||'';
     mediaRec=new MediaRecorder(stream,mime?{mimeType:mime}:{});
     curChunks=[];recState='recording';playStartSound();
@@ -1893,6 +1933,32 @@ function addToQueue(){
   showStatus('ok','✔ أُضيف إلى القائمة');
 }
 
+// ── Async job polling (Gemini / check background tasks) ──
+async function pollTranscribeStatus(jobId){
+  const deadline=Date.now()+15*60*1000;
+  while(Date.now()<deadline){
+    const r=await fetch('/api/transcribe/status/'+encodeURIComponent(jobId));
+    const payload=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(payload.detail||r.statusText);
+    if(payload.status==='done'&&payload.data) return payload.data;
+    if(payload.status==='error') throw new Error(payload.detail||'An internal error occurred. Please try again.');
+    await new Promise(res=>setTimeout(res,1200));
+  }
+  throw new Error('انتهت مهلة انتظار التفريغ');
+}
+async function pollCheckStatus(jobId){
+  const deadline=Date.now()+15*60*1000;
+  while(Date.now()<deadline){
+    const r=await fetch('/api/check/status/'+encodeURIComponent(jobId));
+    const payload=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(payload.detail||r.statusText);
+    if(payload.status==='done'&&payload.data) return payload.data;
+    if(payload.status==='error') throw new Error(payload.detail||'خطأ في المطابقة');
+    await new Promise(res=>setTimeout(res,1200));
+  }
+  throw new Error('انتهت مهلة انتظار المطابقة');
+}
+
 // ── Direct send ───────────────────────────────────────
 async function directSend(){
   const hasAudio=tab==='live'?!!liveBlob:!!uploadFile;
@@ -1933,7 +1999,10 @@ async function directSend(){
       const errData=await res.json().catch(()=>({detail:res.statusText}));
       throw new Error(errData.detail||res.statusText);
     }
-    const data=await res.json();
+    const start=await res.json();
+    const jobId=start.job_id;
+    if(!jobId) throw new Error('لم يُرجع job_id');
+    const data=await pollTranscribeStatus(jobId);
     item.status='done';renderQueue();
     data.plates.forEach(p=>tableRows.push(p));
     saveTable();renderTable();
@@ -2037,7 +2106,10 @@ async function sendItem(idx){
       const errData=await res.json().catch(()=>({detail:res.statusText}));
       throw new Error(errData.detail||res.statusText);
     }
-    const data=await res.json();
+    const start=await res.json();
+    const jobId=start.job_id;
+    if(!jobId) throw new Error('لم يُرجع job_id');
+    const data=await pollTranscribeStatus(jobId);
     item.status='done';renderQueue();
     data.plates.forEach(p=>tableRows.push(p));
     saveTable();renderTable();
@@ -2248,24 +2320,41 @@ async function runCheck(){
     const lc=document.getElementById('largeCol').value.trim();if(lc)fd.append('large_col',lc);
     const sc=document.getElementById('smallCol').value.trim();if(sc)fd.append('small_col',sc);
     const res=await fetch('/api/check',{method:'POST',body:fd});
-    const ct=res.headers.get('Content-Type')||'';
-    if(ct.includes('application/json')){
-      const data=await res.json();
-      if(res.ok&&data.matched===0){
-        showCheckStatus('warn','\u0644\u0627 \u062A\u0648\u062C\u062F \u062A\u0637\u0627\u0628\u0642\u0627\u062A \u2014 \u062A\u062D\u0642\u0642 \u0645\u0646 \u0623\u0633\u0645\u0627\u0621 \u0627\u0644\u0623\u0639\u0645\u062F\u0629 \u0623\u0648 \u0627\u0644\u0645\u062D\u062A\u0648\u0649');
-        document.getElementById('rMatched').textContent='0';document.getElementById('rPlates').textContent='0';
-        document.getElementById('rUnmatched').textContent=data.unmatched??'\u2014';
-        document.getElementById('rLargeCol').textContent=data.large_col_used??'\u2014';document.getElementById('rSmallCol').textContent=data.small_col_used??'\u2014';
-        document.getElementById('checkDlBtn').style.display='none';document.getElementById('checkResultBox').classList.add('show');
-      }else{showCheckStatus('err',data.detail||'\u062E\u0637\u0623 \u063A\u064A\u0631 \u0645\u0639\u0631\u0648\u0641');if(data.headers){showHeadersHint(data.code==='COL_NOT_FOUND_SMALL'?'small':'large',data.headers);}}
-    }else if(ct.includes('spreadsheetml')){
-      checkResultBlob=await res.blob();
+    if(!res.ok){
+      const errData=await res.json().catch(()=>({detail:res.statusText}));
+      throw new Error(errData.detail||res.statusText);
+    }
+    const start=await res.json();
+    const jobId=start.job_id;
+    if(!jobId) throw new Error('\u0644\u0645 \u064A\u064F\u0631\u062C\u0639 job_id');
+    const result=await pollCheckStatus(jobId);
+    if(result.kind==='xlsx'){
+      const bin=atob(result.content_b64);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+      checkResultBlob=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       showCheckStatus('ok','\u2705 \u062A\u0645\u062A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2014 \u0627\u0636\u063A\u0637 \u0644\u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0645\u0644\u0641');
       const lu=document.getElementById('largeCol').value.trim()||checkDetected.large||'\u2014';
       const su=document.getElementById('smallCol').value.trim()||checkDetected.small||'\u2014';
       document.getElementById('rMatched').textContent='\u2714';document.getElementById('rPlates').textContent='\u2714';document.getElementById('rUnmatched').textContent='\u2014';
       document.getElementById('rLargeCol').textContent=lu;document.getElementById('rSmallCol').textContent=su;
       document.getElementById('checkDlBtn').style.display='';document.getElementById('checkResultBox').classList.add('show');
+    }else if(result.kind==='json'){
+      const data=result.body;
+      const statusCode=result.status_code;
+      if(statusCode===200&&data.matched===0){
+        showCheckStatus('warn','\u0644\u0627 \u062A\u0648\u062C\u062F \u062A\u0637\u0627\u0628\u0642\u0627\u062A \u2014 \u062A\u062D\u0642\u0642 \u0645\u0646 \u0623\u0633\u0645\u0627\u0621 \u0627\u0644\u0623\u0639\u0645\u062F\u0629 \u0623\u0648 \u0627\u0644\u0645\u062D\u062A\u0648\u0649');
+        document.getElementById('rMatched').textContent='0';document.getElementById('rPlates').textContent='0';
+        document.getElementById('rUnmatched').textContent=data.unmatched??'\u2014';
+        document.getElementById('rLargeCol').textContent=data.large_col_used??'\u2014';document.getElementById('rSmallCol').textContent=data.small_col_used??'\u2014';
+        document.getElementById('checkDlBtn').style.display='none';document.getElementById('checkResultBox').classList.add('show');
+      }else if(statusCode===422){
+        showCheckStatus('err',data.detail||'\u062E\u0637\u0623 \u063A\u064A\u0631 \u0645\u0639\u0631\u0648\u0641');
+        if(data.headers){showHeadersHint(data.code==='COL_NOT_FOUND_SMALL'?'small':'large',data.headers);}
+      }else{
+        showCheckStatus('err',data.detail||'\u062E\u0637\u0623 \u063A\u064A\u0631 \u0645\u0639\u0631\u0648\u0641');
+        if(data.headers){showHeadersHint(data.code==='COL_NOT_FOUND_SMALL'?'small':'large',data.headers);}
+      }
     }else throw new Error('\u0627\u0633\u062A\u062C\u0627\u0628\u0629 \u063A\u064A\u0631 \u0645\u062A\u0648\u0642\u0639\u0629');
   }catch(e){showCheckStatus('err','\u062E\u0637\u0623: '+e.message);}
   finally{document.getElementById('checkRunBtn').disabled=false;}
@@ -2412,7 +2501,7 @@ function fcStartNewRec(){fcHideChoices();fcStartFreshRec();}
 
 async function fcDoStartRec(){
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const stream=await getMicStreamOrThrow();
     const mime=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','audio/mp4'].find(t=>MediaRecorder.isTypeSupported(t))||'';
     fcMediaRec=new MediaRecorder(stream,mime?{mimeType:mime}:{});
     fcCurChunks=[];fcRecState='recording';playStartSound();
@@ -2730,7 +2819,10 @@ async function fcDoCheck(){
       const err=await res.json().catch(()=>({detail:res.statusText}));
       throw new Error(err.detail||res.statusText);
     }
-    const data=await res.json();
+    const start=await res.json();
+    const jobId=start.job_id;
+    if(!jobId) throw new Error('لم يُرجع job_id');
+    const data=await pollTranscribeStatus(jobId);
     newRows=data.plates||[];
     fcShowStatus('proc','تم التفريغ — استُخرج '+newRows.length+' لوحة. جاري التشيك …',true);
   }catch(rawErr){

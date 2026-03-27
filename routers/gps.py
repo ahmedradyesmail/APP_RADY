@@ -12,10 +12,11 @@ from urllib.parse import quote
 from dependencies.auth import get_current_user
 from services.plate_utils import normalize_plate, auto_detect_plate_col
 from services.excel_utils import (
-    load_workbook_maybe_encrypted,
-    find_best_sheet,
     apply_excel_style,
-    workbook_to_bytes,
+    find_best_sheet_async,
+    load_workbook_from_bytes_async,
+    load_workbook_maybe_encrypted_async,
+    workbook_to_bytes_async,
 )
 from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
 
@@ -46,10 +47,8 @@ async def parse_gps_excel(
     # SECURITY FIX: file size limit to prevent DoS via large uploads
     content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
     try:
-        wb   = openpyxl.load_workbook(
-            io.BytesIO(content), read_only=True, data_only=True
-        )
-        ws   = wb.active
+        wb = await load_workbook_from_bytes_async(content)
+        ws = wb.active
         rows = list(ws.iter_rows(values_only=True))
 
         if not rows:
@@ -168,7 +167,7 @@ async def check_gps_data(
     sc_bytes = await read_upload_with_limit(small_file, MAX_EXCEL_BYTES, 30)
 
     try:
-        large_wb = load_workbook_maybe_encrypted(lc_bytes, password.strip())
+        large_wb = await load_workbook_maybe_encrypted_async(lc_bytes, password.strip())
     except ValueError:
         # SECURITY FIX: hiding internal exception details from client
         logger.exception("Failed to open encrypted large workbook in GPS check")
@@ -178,21 +177,19 @@ async def check_gps_data(
         )
 
     try:
-        small_wb = openpyxl.load_workbook(
-            io.BytesIO(sc_bytes), read_only=True, data_only=True
-        )
+        small_wb = await load_workbook_from_bytes_async(sc_bytes)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"تعذّر فتح الملف الصغير: {e}")
 
     large_ws = (
         large_wb[large_sheet]
         if large_sheet and large_sheet in large_wb.sheetnames
-        else find_best_sheet(large_wb)
+        else await find_best_sheet_async(large_wb)
     )
     small_ws = (
         small_wb[small_sheet]
         if small_sheet and small_sheet in small_wb.sheetnames
-        else find_best_sheet(small_wb)
+        else await find_best_sheet_async(small_wb)
     )
 
     ld = list(large_ws.iter_rows(values_only=True))
@@ -303,10 +300,8 @@ async def parse_ref_plates(
     # SECURITY FIX: file size limit to prevent DoS via large uploads
     content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
     try:
-        wb      = openpyxl.load_workbook(
-            io.BytesIO(content), read_only=True, data_only=True
-        )
-        ws      = find_best_sheet(wb)
+        wb = await load_workbook_from_bytes_async(content)
+        ws = await find_best_sheet_async(wb)
         rows    = list(ws.iter_rows(values_only=True))
         if not rows:
             return JSONResponse({"plates": [], "total": 0, "col_used": ""})
@@ -368,10 +363,8 @@ async def check_ref_plate(
     # SECURITY FIX: file size limit to prevent DoS via large uploads
     content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
     try:
-        wb = openpyxl.load_workbook(
-            io.BytesIO(content), read_only=True, data_only=True
-        )
-        ws = find_best_sheet(wb)
+        wb = await load_workbook_from_bytes_async(content)
+        ws = await find_best_sheet_async(wb)
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
             return JSONResponse({
@@ -541,8 +534,8 @@ async def export_gps_excel(
         {"البند": "أقل وقت (دقيقة)",         "القيمة": results[0]["duration_min"] if results else "—"},
     ])
 
-    content  = workbook_to_bytes(wb)
-    ts       = datetime.now().strftime("%Y%m%d_%H%M")
+    content = await workbook_to_bytes_async(wb)
+    ts = datetime.now().strftime("%Y%m%d_%H%M")
     filename = f"أقرب_المركبات_{ts}.xlsx"
     encoded_filename = quote(filename, safe="")
 

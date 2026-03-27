@@ -1,12 +1,12 @@
+import asyncio
 import json
-import re
-import time
-import tempfile
 import os
-import urllib.request
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
+import aiofiles
+import httpx
 from google import genai
 from google.genai import types
 
@@ -30,23 +30,74 @@ Output ONLY a JSON array where each object has:
 - "vehicle_type": Vehicle description if mentioned, otherwise null.
 """
 
+_http_client: httpx.AsyncClient | None = None
+
+
+async def init_http_client() -> None:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=120.0)
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    if _http_client is None:
+        raise RuntimeError("Gemini HTTP client not initialized")
+    return _http_client
+
 
 def _detect_mime(filename: str) -> str:
     n = (filename or "").lower()
-    if n.endswith(".mp3"):          return "audio/mpeg"
-    if n.endswith(".opus"):         return "audio/ogg"
-    if n.endswith(".ogg"):          return "audio/ogg"
-    if n.endswith((".m4a", ".mp4")): return "audio/mp4"
-    if n.endswith(".wav"):          return "audio/wav"
-    if n.endswith(".flac"):         return "audio/flac"
+    if n.endswith(".mp3"):
+        return "audio/mpeg"
+    if n.endswith(".opus"):
+        return "audio/ogg"
+    if n.endswith(".ogg"):
+        return "audio/ogg"
+    if n.endswith((".m4a", ".mp4")):
+        return "audio/mp4"
+    if n.endswith(".wav"):
+        return "audio/wav"
+    if n.endswith(".flac"):
+        return "audio/flac"
     return "audio/webm"
 
 
-def _wait_for_active(client: genai.Client, uploaded, api_key: str) -> None:
+def _upload_file_sync(tmp_path: str, api_key: str, gemini_mime: str):
+    client = genai.Client(api_key=api_key)
+    upload_config = types.UploadFileConfig(mime_type=gemini_mime)
+    uploaded = client.files.upload(file=tmp_path, config=upload_config)
+    return client, uploaded
+
+
+def _generate_content_sync(client: genai.Client, model_name: str, uploaded) -> str:
+    response = client.models.generate_content(
+        model=model_name,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+            temperature=0.0,
+            response_mime_type="application/json",
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+        ),
+        contents=[USER_PROMPT, uploaded],
+    )
+    return response.text
+
+
+async def _wait_for_active(client: genai.Client, uploaded, api_key: str) -> None:
     """Poll until file is ACTIVE or raise."""
+    http = _get_http_client()
     for attempt in range(40):
         try:
-            file_info  = client.files.get(name=uploaded.name)
+            file_info = await asyncio.to_thread(client.files.get, uploaded.name)
             state_name = (
                 file_info.state.name
                 if hasattr(file_info.state, "name")
@@ -61,14 +112,14 @@ def _wait_for_active(client: genai.Client, uploaded, api_key: str) -> None:
         except RuntimeError:
             raise
         except Exception:
-            # Fallback to REST
+            rest_url = (
+                f"https://generativelanguage.googleapis.com"
+                f"/v1beta/{uploaded.name}?key={api_key}"
+            )
             try:
-                rest_url = (
-                    f"https://generativelanguage.googleapis.com"
-                    f"/v1beta/{uploaded.name}?key={api_key}"
-                )
-                with urllib.request.urlopen(rest_url, timeout=10) as resp:
-                    fj = json.loads(resp.read().decode())
+                resp = await http.get(rest_url, timeout=10.0)
+                resp.raise_for_status()
+                fj = resp.json()
                 sn = fj.get("state", "UNKNOWN")
                 print(f"[Gemini] Poll {attempt + 1} (REST): state={sn}")
                 if sn == "ACTIVE":
@@ -82,7 +133,7 @@ def _wait_for_active(client: genai.Client, uploaded, api_key: str) -> None:
                 raise
             except Exception as e2:
                 print(f"[Gemini] REST error: {e2}")
-        time.sleep(3)
+        await asyncio.sleep(3)
     raise RuntimeError("انتهت مهلة الانتظار (120s) — الملف لم يصبح ACTIVE")
 
 
@@ -94,7 +145,7 @@ def _parse_gemini_response(raw: str) -> list[dict]:
             raw = raw[4:]
     raw = raw.rstrip("`").strip()
     s, e = raw.find("["), raw.rfind("]")
-    raw = raw[s: e + 1] if s != -1 and e != -1 else "[]"
+    raw = raw[s : e + 1] if s != -1 and e != -1 else "[]"
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -136,9 +187,9 @@ def _enrich_plates(
             pt = None
         p["gps"] = f"{pt.get('lat','')},{pt.get('lng','')}" if pt else ""
 
-        p["recorder_name"]  = recorder_name
+        p["recorder_name"] = recorder_name
         p["recording_date"] = now_str
-        p["sheet_name"]     = sheet_name
+        p["sheet_name"] = sheet_name
 
     return plates
 
@@ -171,41 +222,30 @@ async def process_audio(
     suffix = (suffix or ".mp3").encode("ascii", "ignore").decode("ascii") or ".mp3"
     gemini_mime = _detect_mime(filename)
 
-    # Write to temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(file_content)
-        tmp_path = tmp.name
-
+    fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
     try:
-        client        = genai.Client(api_key=api_key)
-        upload_config = types.UploadFileConfig(mime_type=gemini_mime)
+        async with aiofiles.open(tmp_path, "wb") as af:
+            await af.write(file_content)
 
-        print(f"[Gemini] Uploading: {tmp_path}  mime={gemini_mime}")
-        uploaded = client.files.upload(file=tmp_path, config=upload_config)
+        client, uploaded = await asyncio.to_thread(
+            _upload_file_sync, tmp_path, api_key, gemini_mime
+        )
         print(f"[Gemini] Uploaded as: {uploaded.name}")
 
-        _wait_for_active(client, uploaded, api_key)
+        await _wait_for_active(client, uploaded, api_key)
 
-        response = client.models.generate_content(
-            model=model_name,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                temperature=0.0,
-                response_mime_type="application/json",
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                    disable=True
-                ),
-            ),
-            contents=[USER_PROMPT, uploaded],
+        raw_text = await asyncio.to_thread(
+            _generate_content_sync, client, model_name, uploaded
         )
 
-        plates = _parse_gemini_response(response.text)
+        plates = _parse_gemini_response(raw_text)
         plates = _enrich_plates(plates, recorder_name, sheet_name, gps_points)
         plates = _deduplicate(plates)
         return plates
 
     finally:
         try:
-            os.unlink(tmp_path)
+            await asyncio.to_thread(os.unlink, tmp_path)
         except Exception:
             pass

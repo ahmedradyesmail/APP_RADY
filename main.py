@@ -1,5 +1,8 @@
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+import aiofiles
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
@@ -15,6 +18,8 @@ from routers.check import router as check_router
 from routers.gps import router as gps_router
 from routers.admin import router as admin_router
 from routers.auth import router as auth_router
+from services import gemini
+from services import job_store as job_store_svc
 from services.rate_limit import limiter, rate_limit_exceeded_handler
 from services.security import hash_password
 from slowapi.errors import RateLimitExceeded
@@ -53,11 +58,45 @@ def _validate_sensitive_settings() -> None:
 _validate_sensitive_settings()
 
 
+def bootstrap_admin(db: Session) -> None:
+    existing_admin = db.query(User).filter(User.username == settings.admin_username).first()
+    if existing_admin:
+        return
+
+    user = User(
+        username=settings.admin_username,
+        password_hash=hash_password(settings.admin_password),
+        is_admin=True,
+        is_active=True,
+        device_id=None,
+    )
+    db.add(user)
+    db.commit()
+
+
+def _startup_db_sync() -> None:
+    Base.metadata.create_all(bind=engine)
+    apply_sqlite_migrations()
+    with Session(engine) as db:
+        bootstrap_admin(db)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await job_store_svc.init_job_store()
+    await gemini.init_http_client()
+    await asyncio.to_thread(_startup_db_sync)
+    yield
+    await gemini.close_http_client()
+    await job_store_svc.close_job_store()
+
+
 app = FastAPI(
     title=settings.app_title,
     version=settings.app_version,
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
@@ -84,7 +123,7 @@ app.include_router(admin_router)
 
 
 @app.get("/health", tags=["health"])
-def health():
+async def health():
     return {"status": "ok"}
 
 
@@ -101,7 +140,8 @@ if static_path.exists():
 async def index():
     index_file = static_path / "index.html"
     if index_file.exists():
-        content = index_file.read_text(encoding="utf-8")
+        async with aiofiles.open(str(index_file), mode="r", encoding="utf-8") as f:
+            content = await f.read()
         return HTMLResponse(
             content=content,
             headers={
@@ -123,30 +163,6 @@ async def lame_js():
             headers={"Cache-Control": "public, max-age=604800"},
         )
     return HTMLResponse("lame.min.js not found", status_code=404)
-
-
-def bootstrap_admin(db: Session) -> None:
-    existing_admin = db.query(User).filter(User.username == settings.admin_username).first()
-    if existing_admin:
-        return
-
-    user = User(
-        username=settings.admin_username,
-        password_hash=hash_password(settings.admin_password),
-        is_admin=True,
-        is_active=True,
-        device_id=None,
-    )
-    db.add(user)
-    db.commit()
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    Base.metadata.create_all(bind=engine)
-    apply_sqlite_migrations()
-    with Session(engine) as db:
-        bootstrap_admin(db)
 
 
 if __name__ == "__main__":

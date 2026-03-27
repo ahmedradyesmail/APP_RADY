@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import logging
@@ -10,7 +11,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 
 from dependencies.auth import get_current_user
 from services.plate_utils import normalize_plate_value
-from services.excel_utils import apply_excel_style, workbook_to_bytes
+from services.excel_utils import apply_excel_style, workbook_to_bytes_async
 from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
 from urllib.parse import quote
 
@@ -210,7 +211,7 @@ async def export_field_check(
     for col, w in zip("ABCDEFGHI", col_widths):
         ws.column_dimensions[col].width = w
 
-    content  = workbook_to_bytes(wb)
+    content = await workbook_to_bytes_async(wb)
     filename = f"اللوحات_المطابقة_{sheet_name}.xlsx"
 
     return StreamingResponse(
@@ -222,6 +223,49 @@ async def export_field_check(
     )
 
 
+def _parse_excel_sync(content: bytes) -> tuple[list[dict], int]:
+    wb = openpyxl.load_workbook(
+        io.BytesIO(content), read_only=True, data_only=True
+    )
+    ws = wb.active
+    rows_out: list[dict] = []
+    headers: list[str] = []
+
+    for ri, row in enumerate(ws.iter_rows(values_only=True)):
+        if ri == 0:
+            headers = [str(c).strip() if c else "" for c in row]
+            continue
+        if all(c is None for c in row):
+            continue
+
+        def col(name: str, fallback: int) -> str:
+            for i, h in enumerate(headers):
+                if name in h:
+                    return (
+                        str(row[i]).strip()
+                        if i < len(row) and row[i] is not None
+                        else ""
+                    )
+            return (
+                str(row[fallback]).strip()
+                if fallback < len(row) and row[fallback] is not None
+                else ""
+            )
+
+        rows_out.append({
+            "full_plate":       col("اللوحة", 1),
+            "vehicle_type":     col("المركبة", 2),
+            "street_name":      col("الشارع", 3),
+            "location_details": col("الموقع", 4),
+            "notes":            col("ملاحظات", 5),
+            "recorder_name":    col("المسجّل", 6),
+            "recording_date":   col("التسجيل", 7),
+            "gps":              col("GPS", 8),
+        })
+
+    return rows_out, len(rows_out)
+
+
 @router.post("/parse-excel")
 async def parse_excel(file: UploadFile = File(...)):
     if not file:
@@ -230,46 +274,9 @@ async def parse_excel(file: UploadFile = File(...)):
     try:
         # SECURITY FIX: file size limit to prevent DoS via large uploads
         content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
-        wb = openpyxl.load_workbook(
-            io.BytesIO(content), read_only=True, data_only=True
-        )
-        ws = wb.active
-        rows_out = []
-        headers  = []
+        rows_out, total = await asyncio.to_thread(_parse_excel_sync, content)
 
-        for ri, row in enumerate(ws.iter_rows(values_only=True)):
-            if ri == 0:
-                headers = [str(c).strip() if c else "" for c in row]
-                continue
-            if all(c is None for c in row):
-                continue
-
-            def col(name, fallback):
-                for i, h in enumerate(headers):
-                    if name in h:
-                        return (
-                            str(row[i]).strip()
-                            if i < len(row) and row[i] is not None
-                            else ""
-                        )
-                return (
-                    str(row[fallback]).strip()
-                    if fallback < len(row) and row[fallback] is not None
-                    else ""
-                )
-
-            rows_out.append({
-                "full_plate":       col("اللوحة", 1),
-                "vehicle_type":     col("المركبة", 2),
-                "street_name":      col("الشارع", 3),
-                "location_details": col("الموقع", 4),
-                "notes":            col("ملاحظات", 5),
-                "recorder_name":    col("المسجّل", 6),
-                "recording_date":   col("التسجيل", 7),
-                "gps":              col("GPS", 8),
-            })
-
-        return JSONResponse({"rows": rows_out, "total": len(rows_out)})
+        return JSONResponse({"rows": rows_out, "total": total})
 
     except Exception:
         # SECURITY FIX: hiding internal exception details from client

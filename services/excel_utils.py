@@ -1,8 +1,11 @@
+import asyncio
 import io
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from .plate_utils import auto_detect_plate_col
+
+# Project uses openpyxl (not pandas); heavy workbook I/O runs in a thread pool.
 
 
 def load_workbook_maybe_encrypted(
@@ -104,3 +107,30 @@ def workbook_to_bytes(wb: openpyxl.Workbook) -> bytes:
     wb.save(buf)
     buf.seek(0)
     return buf.read()
+
+
+async def load_workbook_maybe_encrypted_async(
+    file_bytes: bytes, password: str = ""
+) -> openpyxl.Workbook:
+    return await asyncio.to_thread(
+        load_workbook_maybe_encrypted, file_bytes, password
+    )
+
+
+async def find_best_sheet_async(wb: openpyxl.Workbook):
+    return await asyncio.to_thread(find_best_sheet, wb)
+
+
+async def workbook_to_bytes_async(wb: openpyxl.Workbook) -> bytes:
+    return await asyncio.to_thread(workbook_to_bytes, wb)
+
+
+async def load_workbook_from_bytes_async(
+    content: bytes, read_only: bool = True, data_only: bool = True
+) -> openpyxl.Workbook:
+    def _load() -> openpyxl.Workbook:
+        return openpyxl.load_workbook(
+            io.BytesIO(content), read_only=read_only, data_only=data_only
+        )
+
+    return await asyncio.to_thread(_load)
