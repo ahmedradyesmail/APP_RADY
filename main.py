@@ -75,7 +75,7 @@ def bootstrap_admin(db: Session) -> None:
 
 
 def _startup_db_sync() -> None:
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine, checkfirst=True)
     apply_sqlite_migrations()
     with Session(engine) as db:
         bootstrap_admin(db)
