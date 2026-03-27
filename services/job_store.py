@@ -54,7 +54,8 @@ async def init_job_store() -> None:
     )
     await _redis.ping()
     _use_redis = True
-    logger.info("job_store: using Redis for shared job state")
+    # logger.info("job_store: using Redis for shared job state")
+    print("job_store: using Redis for shared job state", flush=True)
 
 
 async def close_job_store() -> None:
