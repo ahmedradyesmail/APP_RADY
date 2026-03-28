@@ -13,10 +13,26 @@ from services.excel_utils import (
     load_workbook_maybe_encrypted,
     find_best_sheet,
     apply_excel_style,
+    apply_excel_style_matched_merge,
     workbook_to_bytes,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _norm_large_export_cols(requested: list[str], available: list[str]) -> list[str]:
+    """Empty selection → export all large columns."""
+    if not requested:
+        return [h for h in available if h]
+    out = [c for c in requested if c in available]
+    return out if out else [h for h in available if h]
+
+
+def _norm_small_export_cols(requested: list[str], available: list[str]) -> list[str]:
+    """Empty selection → no small columns (user must tick columns explicitly)."""
+    if not requested:
+        return []
+    return [c for c in requested if c in available]
 
 
 def run_check_plates_sync(
@@ -27,6 +43,8 @@ def run_check_plates_sync(
     small_col: str,
     large_sheet: str,
     small_sheet: str,
+    large_export_cols: list[str] | None = None,
+    small_export_cols: list[str] | None = None,
 ) -> dict:
     """
     Returns one of:
@@ -109,7 +127,7 @@ def run_check_plates_sync(
         }
 
     sci = sh.index(sc)
-    matched: list = []
+    matched_pairs: list[tuple[dict, dict]] = []
     mp: list = []
     up: list = []
 
@@ -120,13 +138,15 @@ def run_check_plates_sync(
         norm = normalize_plate(rp)
         if not norm:
             continue
+        small_rd = {sh[i]: (row[i] if i < len(row) else None) for i in range(len(sh))}
         if norm in lookup:
-            matched.extend(lookup[norm])
+            for large_rd in lookup[norm]:
+                matched_pairs.append((large_rd, small_rd))
             mp.append(str(rp or "").strip())
         else:
             up.append(str(rp or "").strip())
 
-    if not matched:
+    if not matched_pairs:
         return {
             "kind": "json",
             "status_code": 200,
@@ -139,21 +159,47 @@ def run_check_plates_sync(
             },
         }
 
+    le_cols = _norm_large_export_cols(list(large_export_cols or []), lh)
+    se_cols = _norm_small_export_cols(list(small_export_cols or []), sh)
+
+    display_headers: list[str] = []
+    col_sources: list[str] = []
+    for c in le_cols:
+        display_headers.append(c)
+        col_sources.append("large")
+    for c in se_cols:
+        display_headers.append(f"صغير — {c}")
+        col_sources.append("small")
+
+    matched_rows: list[dict] = []
+    for large_rd, small_rd in matched_pairs:
+        rd_out: dict = {}
+        for c in le_cols:
+            v = large_rd.get(c, "")
+            rd_out[c] = "" if v is None else v
+        for c in se_cols:
+            disp = f"صغير — {c}"
+            v = small_rd.get(c, "")
+            rd_out[disp] = "" if v is None else v
+        matched_rows.append(rd_out)
+
     wb_out = openpyxl.Workbook()
     ws_m = wb_out.active
     ws_m.title = "التطابقات"
-    apply_excel_style(ws_m, lh, matched)
+    apply_excel_style_matched_merge(ws_m, display_headers, matched_rows, col_sources)
 
     ws_s = wb_out.create_sheet("ملخص")
     apply_excel_style(
         ws_s,
         ["البند", "القيمة"],
         [
-            {"البند": "إجمالي صفوف مُطابَقة", "القيمة": len(matched)},
+            {"البند": "إجمالي صفوف مُطابَقة", "القيمة": len(matched_pairs)},
             {"البند": "لوحات مطابَقة", "القيمة": len(mp)},
             {"البند": "لوحات غير مطابَقة", "القيمة": len(up)},
             {"البند": "عمود الملف الكبير", "القيمة": lc},
             {"البند": "عمود الملف الصغير", "القيمة": sc},
+            {"البند": "أعمدة الملف الكبير في التصدير", "القيمة": ", ".join(le_cols)},
+            {"البند": "أعمدة الملف الصغير في التصدير", "القيمة": ", ".join(se_cols)},
         ],
     )
 

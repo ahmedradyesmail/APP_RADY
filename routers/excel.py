@@ -124,7 +124,7 @@ async def export_excel(
     for col, w in zip("ABCDEFGHI", _COL_WIDTHS):
         ws.column_dimensions[col].width = w
 
-    content = workbook_to_bytes(wb)
+    content = await workbook_to_bytes_async(wb)
     filename = f"تفريغ_{sheet_name}.xlsx"
 
     return StreamingResponse(

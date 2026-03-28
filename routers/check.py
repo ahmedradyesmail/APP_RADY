@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
@@ -82,6 +83,19 @@ async def check_headers(
     return JSONResponse(result)
 
 
+def _parse_col_list(raw: str) -> list[str]:
+    s = (raw or "").strip()
+    if not s:
+        return []
+    try:
+        data = json.loads(s)
+        if isinstance(data, list):
+            return [str(x).strip() for x in data if str(x).strip()]
+    except Exception:
+        pass
+    return []
+
+
 async def _check_job_task(
     job_id: str,
     lc_bytes: bytes,
@@ -91,6 +105,8 @@ async def _check_job_task(
     small_col: str,
     large_sheet: str,
     small_sheet: str,
+    large_export_cols: list[str],
+    small_export_cols: list[str],
 ) -> None:
     try:
         raw = await asyncio.to_thread(
@@ -102,6 +118,8 @@ async def _check_job_task(
             small_col,
             large_sheet,
             small_sheet,
+            large_export_cols,
+            small_export_cols,
         )
         if raw["kind"] == "xlsx":
             await job_save(
@@ -176,6 +194,8 @@ async def check_plates(
     small_col: str = Form(""),
     large_sheet: str = Form(""),
     small_sheet: str = Form(""),
+    large_export_cols_json: str = Form(""),
+    small_export_cols_json: str = Form(""),
 ):
     # SECURITY FIX: file size limit to prevent DoS via large uploads
     lc_bytes = await read_upload_with_limit(large_file, MAX_EXCEL_BYTES, 30)
@@ -198,6 +218,8 @@ async def check_plates(
         small_col.strip(),
         large_sheet.strip(),
         small_sheet.strip(),
+        _parse_col_list(large_export_cols_json),
+        _parse_col_list(small_export_cols_json),
     )
     return JSONResponse({"job_id": job_id, "status": "processing"})
 

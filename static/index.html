@@ -294,8 +294,10 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .fc-plate-check-state.proc{color:var(--teal);border-color:rgba(20,184,166,.35);background:rgba(20,184,166,.1)}
 .maps-link{display:inline-flex;align-items:center;gap:.3rem;font-family:var(--mono);font-size:.69rem;color:var(--teal);text-decoration:none;padding:.15rem .45rem;border-radius:5px;border:1px solid rgba(20,184,166,.3);transition:all .18s}
 .maps-link:hover{background:rgba(20,184,166,.12);border-color:var(--teal)}
-.check-actions{display:grid;grid-template-columns:1fr 1fr;gap:.85rem;margin:1rem 0}
-@media(max-width:520px){.check-actions{grid-template-columns:1fr}}
+.check-actions{display:grid;grid-template-columns:1fr;gap:.85rem;margin:1rem 0}
+.check-export-drop{background:var(--s2);border:1px solid var(--brd2);border-radius:7px;padding:.55rem .75rem;margin-top:.35rem}
+.check-export-drop summary{cursor:pointer;font-family:var(--mono);font-size:.78rem;color:var(--dim2)}
+.check-export-hint{font-size:.68rem;color:var(--dim2);margin-top:.35rem;line-height:1.5}
 .check-run-btn{width:100%;padding:.95rem;background:linear-gradient(135deg,var(--violet),#6d28d9,#5b21b6);border:none;border-radius:10px;color:#fff;font-family:var(--ar);font-size:1rem;font-weight:800;cursor:pointer;transition:all .22s;display:flex;align-items:center;justify-content:center;gap:.55rem;box-shadow:0 4px 20px rgba(139,92,246,.4)}
 .check-run-btn:hover:not(:disabled){opacity:.9;transform:translateY(-2px)}
 .check-run-btn:disabled{opacity:.28;cursor:not-allowed}
@@ -882,6 +884,14 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
           <span class="detect-badge pending" id="largeColBadge">&mdash;</span>
         </div>
       </div>
+      <div style="margin-top:.65rem">
+        <label class="lbl">أعمدة Excel (الملف الكبير)</label>
+        <details class="check-export-drop" id="checkLargeExportDrop">
+          <summary>اختر الأعمدة الظاهرة في ورقة التطابق…</summary>
+          <div id="checkLargeExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
+        </details>
+        <p class="check-export-hint">رأس العمود بألوان مميّزة؛ نص الخلايا أسود. إن لم تختر شيئاً هنا، يُصدَّر كل أعمدة الملف الكبير.</p>
+      </div>
     </div>
     <div class="file-card violet-card">
       <div class="fc-label violet">&#x1F4CB; الملف الصغير <span class="fc-badge small-badge">قائمة البحث</span></div>
@@ -904,6 +914,14 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
           <span class="detect-badge pending" id="smallColBadge">&mdash;</span>
         </div>
       </div>
+      <div style="margin-top:.65rem">
+        <label class="lbl">أعمدة Excel (الملف الصغير)</label>
+        <details class="check-export-drop" id="checkSmallExportDrop">
+          <summary>اختر الأعمدة الظاهرة في ورقة التطابق…</summary>
+          <div id="checkSmallExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
+        </details>
+        <p class="check-export-hint">لا يُحدَّد شيء تلقائياً &mdash; اختر الأعمدة التي تريدها في التصدير. بادئة «صغير —» في عنوان العمود. بدون اختيار لا تُصدَّر أعمدة من الملف الصغير.</p>
+      </div>
       <div style="margin-top:.65rem;padding:.75rem;background:var(--s2);border:1px solid var(--brd);border-radius:8px">
         <p style="font-size:.73rem;color:var(--dim2);line-height:1.6">&#x1F4A1; الأعمدة المكتشفة تلقائياً:<br/>
           <span style="font-family:var(--mono);color:var(--violet)">اللوحه &middot; رقم اللوحه &middot; اللوحة &middot; رقم اللوحة</span></p>
@@ -914,11 +932,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   <div class="status" id="checkStatus"><div class="spin" id="checkSpin" style="display:none"></div><span id="checkStatusTxt"></span></div>
 
   <div class="check-actions">
-    <button class="check-run-btn" id="checkRunBtn" onclick="runCheck()" disabled>
-      &#x1F50D; مطابقة عادية وتحميل النتائج
-    </button>
-    <button class="gps-run-btn" id="gpsMatchBtn" onclick="runGpsCheck()" disabled style="display:none">
-      &#x1F4CD; مطابقة GPS &mdash; أقرب المركبات
+    <button class="check-run-btn" id="checkMatchBtn" onclick="runMatch()" disabled>
+      Match &mdash; &#x1F50D; مطابقة وتصدير Excel
     </button>
   </div>
 
@@ -940,7 +955,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <div class="ptitle teal">&#x1F4CD; إعدادات مطابقة GPS</div>
       <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;padding:.6rem .9rem;background:rgba(20,184,166,.08);border:1px solid rgba(20,184,166,.25);border-radius:8px">
         <span>&#x2705;</span>
-        <span style="font-size:.78rem;color:var(--teal);font-weight:700">تم اكتشاف عمود GPS في الملف الكبير &mdash; يمكنك استخدام المطابقة بالموقع</span>
+        <span style="font-size:.78rem;color:var(--teal);font-weight:700">تم اكتشاف عمود GPS في الملف الكبير &mdash; بعد الضغط على Match يُرتَّب أقرب المركبات تلقائياً إن وُجد مفتاح ORS وموقعك أدناه</span>
       </div>
       <!-- ═══ ORS KEY: readonly, loaded from settings ═══ -->
       <div style="margin-bottom:.85rem">
@@ -2174,7 +2189,8 @@ async function exportExcel(){
   showStatus('proc','جاري تصدير Excel …',true);
   try{
     const fd=new FormData();fd.append('rows_json',JSON.stringify(tableRows));fd.append('sheet_name',sheetName);
-    const res=await fetch('/api/export-excel',{method:'POST',body:fd});if(!res.ok)throw new Error(res.statusText);
+    const res=await fetch('/api/export-excel',{method:'POST',body:fd});
+    if(!res.ok){const err=await res.json().catch(()=>({detail:res.statusText}));throw new Error(err.detail||res.statusText);}
     triggerDownload(await res.blob(),'تفريغ_'+sheetName+'.xlsx');showStatus('ok','✔ تم تحميل ملف Excel');
   }catch(e){showStatus('err','خطأ في التصدير: '+e.message);}
 }
@@ -2214,9 +2230,42 @@ function onCheckFileChange(file,side){
   checkRunReady();
 }
 function handleDropCheck(e,side){e.preventDefault();document.getElementById(side==='large'?'dropLarge':'dropSmall').classList.remove('drag');const f=e.dataTransfer.files[0];if(f)onCheckFileChange(f,side);}
+function clearCheckExportList(side){
+  const id=side==='large'?'checkLargeExportList':'checkSmallExportList';
+  const el=document.getElementById(id);
+  if(el) el.innerHTML='';
+}
+function rebuildCheckExportChoices(side,headers,defaultChecked){
+  const id=side==='large'?'checkLargeExportList':'checkSmallExportList';
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.innerHTML='';
+  const on=defaultChecked!==false;
+  (headers||[]).forEach(h=>{
+    if(!h) return;
+    const lab=document.createElement('label');
+    lab.style.cssText='display:flex;align-items:center;gap:.45rem;font-size:.78rem;cursor:pointer;padding:.2rem 0';
+    const cb=document.createElement('input');
+    cb.type='checkbox';
+    cb.value=h;
+    cb.checked=on;
+    cb.className='check-export-cb check-export-'+side;
+    const sp=document.createElement('span');
+    sp.textContent=h;
+    sp.style.fontFamily='var(--mono)';
+    lab.appendChild(cb);
+    lab.appendChild(sp);
+    el.appendChild(lab);
+  });
+}
+function getCheckExportColsJson(side){
+  const boxes=document.querySelectorAll('.check-export-cb.check-export-'+side+':checked');
+  if(!boxes.length) return '[]';
+  return JSON.stringify([...boxes].map(b=>b.value));
+}
 function removeCheckFile(side){
-  if(side==='large'){checkLargeFile=null;document.getElementById('largeFname').textContent='';document.getElementById('removeLargeBtn').classList.remove('show');document.getElementById('largeFileIn').value='';resetColDropdown('large');setBadge('large','pending','\u2014');clearPersistedCheckFile('large');}
-  else{checkSmallFile=null;document.getElementById('smallFname').textContent='';document.getElementById('removeSmallBtn').classList.remove('show');document.getElementById('smallFileIn').value='';resetColDropdown('small');setBadge('small','pending','\u2014');clearPersistedCheckFile('small');}
+  if(side==='large'){checkLargeFile=null;document.getElementById('largeFname').textContent='';document.getElementById('removeLargeBtn').classList.remove('show');document.getElementById('largeFileIn').value='';const lp=document.getElementById('largePw');if(lp)lp.value='';resetColDropdown('large');setBadge('large','pending','\u2014');clearPersistedCheckFile('large');clearCheckExportList('large');}
+  else{checkSmallFile=null;document.getElementById('smallFname').textContent='';document.getElementById('removeSmallBtn').classList.remove('show');document.getElementById('smallFileIn').value='';resetColDropdown('small');setBadge('small','pending','\u2014');clearPersistedCheckFile('small');clearCheckExportList('small');}
   resetCheckDetect();checkRunReady();
 }
 function resetColDropdown(side){
@@ -2241,8 +2290,6 @@ function fillColDropdown(side,headers,selectedVal){
 function resetCheckDetect(){
   checkLargeHasGps=false;gpsResultBlob=null;
   document.getElementById('gpsMatchSection').style.display='none';
-  document.getElementById('gpsMatchBtn').style.display='none';
-  document.getElementById('gpsMatchBtn').disabled=true;
   document.getElementById('gpsResultBox').classList.remove('show');
   checkResultBlob=null;
   document.getElementById('checkResultBox').classList.remove('show');
@@ -2285,15 +2332,17 @@ async function detectColForSide(side){
       setBadge(side,'notfound','؟ غير مكتشف');
       if(info.headers&&info.headers.length)showHeadersHint(side,info.headers);
     }
+    if((side==='large'||side==='small')&&!info.error){
+      rebuildCheckExportChoices(side,info.headers||[],side==='large');
+    }
     if(side==='large'&&!info.error){
       checkLargeHasGps=!!(info.headers&&info.headers.includes('GPS'));
       const gs=document.getElementById('gpsMatchSection');
-      const gb=document.getElementById('gpsMatchBtn');
       if(checkLargeHasGps){
-        gs.style.display='';gb.style.display='';gb.disabled=false;
+        gs.style.display='';
         if(!document.getElementById('gpsMyLat').value.trim())refreshCheckLoc();
       } else {
-        gs.style.display='none';gb.style.display='none';gb.disabled=true;
+        gs.style.display='none';
       }
     }
     checkRunReady();
@@ -2308,17 +2357,22 @@ function showHeadersHint(side,headers){
   content.innerHTML+='<p style="margin-bottom:.5rem"><strong style="color:var(--violet)">'+label+':</strong> \u0627\u0646\u0642\u0631 \u0644\u0627\u062E\u062A\u064A\u0627\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629:</p><div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem">'+
     headers.map(h=>h?'<button onclick="document.getElementById(\''+ti+'\').value=\''+esc(h)+'\';setBadge(\''+side+'\',\'found\',\'\u270E \u064A\u062F\u0648\u064A\');checkRunReady();document.getElementById(\'checkHeadersHint\').style.display=\'none\'" style="padding:.3rem .7rem;background:var(--s2);border:1px solid var(--brd2);border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:.75rem;color:var(--text);transition:all .18s" onmouseover="this.style.borderColor=\'var(--violet)\';this.style.color=\'var(--violet)\'" onmouseout="this.style.borderColor=\'var(--brd2)\';this.style.color=\'var(--text)\'">'+esc(h)+'</button>':'').join('')+'</div>';
 }
-function checkRunReady(){document.getElementById('checkRunBtn').disabled=!(checkLargeFile&&checkSmallFile);}
-async function runCheck(){
+function checkRunReady(){document.getElementById('checkMatchBtn').disabled=!(checkLargeFile&&checkSmallFile);}
+async function runMatch(){
   if(!checkLargeFile||!checkSmallFile){showCheckStatus('err','\u064A\u0631\u062C\u0649 \u0631\u0641\u0639 \u0643\u0644\u0627 \u0627\u0644\u0645\u0644\u0641\u064A\u0646');return;}
   checkResultBlob=null;document.getElementById('checkResultBox').classList.remove('show');
   document.getElementById('checkHeadersHint').style.display='none';document.getElementById('checkHeadersContent').innerHTML='';
-  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2026',true);document.getElementById('checkRunBtn').disabled=true;
+  gpsResultBlob=null;document.getElementById('gpsResultBox').classList.remove('show');
+  document.getElementById('gpsResultTableWrap').style.display='none';
+  document.getElementById('gpsResultTableBody').innerHTML='';
+  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2026',true);document.getElementById('checkMatchBtn').disabled=true;
   try{
     const fd=new FormData();fd.append('large_file',checkLargeFile);fd.append('small_file',checkSmallFile);
     const pw=document.getElementById('largePw').value.trim();if(pw)fd.append('password',pw);
     const lc=document.getElementById('largeCol').value.trim();if(lc)fd.append('large_col',lc);
     const sc=document.getElementById('smallCol').value.trim();if(sc)fd.append('small_col',sc);
+    fd.append('large_export_cols_json',getCheckExportColsJson('large'));
+    fd.append('small_export_cols_json',getCheckExportColsJson('small'));
     const res=await fetch('/api/check',{method:'POST',body:fd});
     if(!res.ok){
       const errData=await res.json().catch(()=>({detail:res.statusText}));
@@ -2339,6 +2393,7 @@ async function runCheck(){
       document.getElementById('rMatched').textContent='\u2714';document.getElementById('rPlates').textContent='\u2714';document.getElementById('rUnmatched').textContent='\u2014';
       document.getElementById('rLargeCol').textContent=lu;document.getElementById('rSmallCol').textContent=su;
       document.getElementById('checkDlBtn').style.display='';document.getElementById('checkResultBox').classList.add('show');
+      if(checkLargeHasGps) await runGpsNearestAfterMatch();
     }else if(result.kind==='json'){
       const data=result.body;
       const statusCode=result.status_code;
@@ -2357,7 +2412,10 @@ async function runCheck(){
       }
     }else throw new Error('\u0627\u0633\u062A\u062C\u0627\u0628\u0629 \u063A\u064A\u0631 \u0645\u062A\u0648\u0642\u0639\u0629');
   }catch(e){showCheckStatus('err','\u062E\u0637\u0623: '+e.message);}
-  finally{document.getElementById('checkRunBtn').disabled=false;}
+  finally{
+    document.getElementById('gpsProgress').style.display='none';
+    document.getElementById('checkMatchBtn').disabled=false;
+  }
 }
 function downloadResult(){if(!checkResultBlob)return;const ts=new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');triggerDownload(checkResultBlob,'\u0627\u0644\u062A\u0637\u0627\u0628\u0642\u0627\u062A_'+ts+'.xlsx');}
 function togglePw(inputId,btn){const inp=document.getElementById(inputId);inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'\u{1F441}':'\u{1F648}';}
@@ -2377,21 +2435,18 @@ function refreshCheckLoc(){
   );
 }
 function setCheckLocDot(state,txt){const d=document.getElementById('checkLocDot');d.className='dot'+(state==='on'?' on':state==='err'?' err':'');document.getElementById('checkLocTxt').textContent=txt;}
-async function runGpsCheck(){
+async function runGpsNearestAfterMatch(){
   const orsKey=document.getElementById('orsKey').value.trim();
   const myLat=document.getElementById('gpsMyLat').value.trim();
   const myLon=document.getElementById('gpsMyLon').value.trim();
-  if(!orsKey){showCheckStatus('err','\u0645\u0641\u062A\u0627\u062D ORS \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F \u2014 \u0623\u062F\u062E\u0644\u0647 \u0645\u0646 \u2699 \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A');return;}
-  if(!myLat||!myLon){showCheckStatus('err','\u0644\u0645 \u064A\u062A\u0645 \u062A\u062D\u062F\u064A\u062F \u0645\u0648\u0642\u0639\u0643');return;}
-  if(!checkLargeFile||!checkSmallFile){showCheckStatus('err','\u064A\u0631\u062C\u0649 \u0631\u0641\u0639 \u0643\u0644\u0627 \u0627\u0644\u0645\u0644\u0641\u064A\u0646');return;}
-  gpsResultBlob=null;document.getElementById('gpsResultBox').classList.remove('show');
-  document.getElementById('gpsResultTableWrap').style.display='none';
-  document.getElementById('gpsResultTableBody').innerHTML='';
-  document.getElementById('gpsMatchBtn').disabled=true;
+  if(!orsKey||!myLat||!myLon){
+    showCheckStatus('ok','\u2705 \u062A\u0645\u062A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2014 \u0644\u0645 \u064A\u064F\u062D\u0633\u0628 \u0623\u0642\u0631\u0628 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A (\u0623\u062F\u062E\u0644 \u0645\u0641\u062A\u0627\u062D ORS \u0648\u0645\u0648\u0642\u0639\u0643 \u0623\u0648\u0644\u0627\u064B).');
+    return;
+  }
   document.getElementById('gpsProgress').style.display='';
   document.getElementById('gpsProgFill').style.width='0%';
   document.getElementById('gpsProgLbl').textContent='';
-  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0645\u0637\u0627\u0628\u0642\u0629 \u0627\u0644\u0645\u0644\u0641\u064A\u0646 ...',true);
+  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0645\u0637\u0627\u0628\u0642\u0629 GPS (\u0623\u0642\u0631\u0628 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A) \u2026',true);
   let vehicles=[];
   try{
     const fd=new FormData();fd.append('large_file',checkLargeFile);fd.append('small_file',checkSmallFile);
@@ -2400,11 +2455,19 @@ async function runGpsCheck(){
     const sc=document.getElementById('smallCol').value.trim();if(sc)fd.append('small_col',sc);
     const res=await fetch('/api/check-gps-data',{method:'POST',body:fd});
     const data=await res.json();
-    if(!res.ok){showCheckStatus('err',data.detail||'\u062E\u0637\u0623');_gpsReset();return;}
-    if(!data.vehicles||!data.vehicles.length){showCheckStatus('warn','\u0644\u0627 \u062A\u0648\u062C\u062F \u062A\u0637\u0627\u0628\u0642\u0627\u062A');_gpsReset();return;}
+    if(!res.ok){showCheckStatus('warn','\u2705 \u062A\u0645\u062A \u0645\u0637\u0627\u0628\u0642\u0629 Excel. GPS: '+String(data.detail||'\u062E\u0637\u0623'));_gpsReset();return;}
+    if(!data.vehicles||!data.vehicles.length){
+      showCheckStatus('ok','\u2705 \u062A\u0645\u062A \u0645\u0637\u0627\u0628\u0642\u0629 Excel. \u0644\u0627 \u062A\u0648\u062C\u062F \u0645\u0631\u0643\u0628\u0627\u062A \u0628\u0625\u062D\u062F\u0627\u062B\u064A\u0627\u062A \u0644\u0644\u0645\u0637\u0627\u0628\u0642\u0629.');
+      _gpsReset();
+      return;
+    }
     vehicles=data.vehicles;
-    if(data.skipped>0)showCheckStatus('warn','\u062A\u0645 \u062A\u062E\u0637\u064A '+data.skipped+' \u0628\u062F\u0648\u0646 GPS',false);
-  }catch(e){showCheckStatus('err','\u062E\u0637\u0623: '+e.message);_gpsReset();return;}
+    if(data.skipped>0)showCheckStatus('proc','\u062A\u0645 \u062A\u062E\u0637\u064A '+data.skipped+' \u0628\u062F\u0648\u0646 GPS \u2026',true);
+  }catch(e){
+    showCheckStatus('warn','\u2705 \u062A\u0645\u062A \u0645\u0637\u0627\u0628\u0642\u0629 Excel. GPS: '+e.message);
+    _gpsReset();
+    return;
+  }
   const ORS='https://api.openrouteservice.org/v2/directions/driving-car';
   const results=[],failed=[];let quotaExceeded=false;
   for(let i=0;i<vehicles.length&&!quotaExceeded;i++){
@@ -2421,7 +2484,7 @@ async function runGpsCheck(){
       try{
         const r=await fetch(ORS,{method:'POST',headers:{'Authorization':orsKey,'Content-Type':'application/json'},body:JSON.stringify({coordinates:[[parseFloat(myLon),parseFloat(myLat)],[vLon,vLat]],units:'km'})});
         const rd=await r.json();
-        if(r.status===429){showCheckStatus('err','\u062A\u062C\u0627\u0648\u0632\u062A \u062D\u062F \u0627\u0644\u0637\u0644\u0628\u0627\u062A (2000/\u064A\u0648\u0645)');quotaExceeded=true;break;}
+        if(r.status===429){showCheckStatus('warn','\u2705 Excel \u062C\u0627\u0647\u0632. GPS: \u062A\u062C\u0627\u0648\u0632\u062A \u062D\u062F ORS');quotaExceeded=true;break;}
         if(r.ok&&rd.routes?.length){const s=rd.routes[0].summary;results.push({...v,distance_km:+s.distance.toFixed(2),duration_min:+(s.duration/60).toFixed(1)});routed=true;}
         else{if(att<2)await new Promise(r=>setTimeout(r,3000));else failed.push({...v,reason:rd?.error?.message||'\u0644\u0627 \u064A\u0648\u062C\u062F \u0645\u0633\u0627\u0631'});}
       }catch(e2){if(att<2)await new Promise(r=>setTimeout(r,3000));else failed.push({...v,reason:e2.message});}
@@ -2429,7 +2492,11 @@ async function runGpsCheck(){
     if(!quotaExceeded&&i<vehicles.length-1)await new Promise(r=>setTimeout(r,1200));
   }
   document.getElementById('gpsProgress').style.display='none';
-  if(!results.length){showCheckStatus('err','\u0644\u0645 \u064A\u062A\u0645 \u062D\u0633\u0627\u0628 \u0623\u064A \u0645\u0633\u0627\u0631');_gpsReset();return;}
+  if(!results.length){
+    showCheckStatus('warn','\u2705 Excel \u062C\u0627\u0647\u0632. \u0644\u0645 \u064A\u062A\u0645 \u062D\u0633\u0627\u0628 \u0645\u0633\u0627\u0631 GPS.');
+    _gpsReset();
+    return;
+  }
   results.sort((a,b)=>a.duration_min-b.duration_min);results.forEach((r,i)=>r.rank=i+1);
   const tbody=document.getElementById('gpsResultTableBody');
   tbody.innerHTML='';
@@ -2466,17 +2533,16 @@ async function runGpsCheck(){
   document.getElementById('gpsRFail').textContent=failed.length||'0';
   document.getElementById('gpsRNearest').textContent=results[0].plate;
   document.getElementById('gpsResultBox').classList.add('show');
-  showCheckStatus('proc','جاري إنشاء ملف Excel ...',true);
+  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0625\u0646\u0634\u0627\u0621 Excel GPS \u2026',true);
   try{
     const fd2=new FormData();fd2.append('results_json',JSON.stringify(results));fd2.append('failed_json',JSON.stringify(failed));fd2.append('my_lat',myLat);fd2.append('my_lon',myLon);
     const er=await fetch('/api/export-gps-excel',{method:'POST',body:fd2});
     if(!er.ok){const e=await er.json().catch(()=>({detail:er.statusText}));throw new Error(e.detail);}
     gpsResultBlob=await er.blob();
-    showCheckStatus('ok','\u2705 \u062A\u0645! '+results.length+' \u0645\u0631\u0643\u0628\u0629'+(failed.length?' \u2014 '+failed.length+' \u0641\u0634\u0644\u062A':''));
-  }catch(e){showCheckStatus('err','\u062E\u0637\u0623: '+e.message);}
-  document.getElementById('gpsMatchBtn').disabled=false;
+    showCheckStatus('ok','\u2705 \u062A\u0645\u062A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u0648 GPS: '+results.length+' \u0645\u0631\u0643\u0628\u0629'+(failed.length?' \u2014 '+failed.length+' \u0641\u0634\u0644\u062A':''));
+  }catch(e){showCheckStatus('warn','\u2705 Excel \u0627\u0644\u062A\u0637\u0627\u0628\u0642 \u062C\u0627\u0647\u0632. \u062E\u0637\u0623 GPS: '+e.message);}
 }
-function _gpsReset(){document.getElementById('gpsProgress').style.display='none';document.getElementById('gpsMatchBtn').disabled=false;}
+function _gpsReset(){document.getElementById('gpsProgress').style.display='none';}
 function downloadGpsResult(){if(!gpsResultBlob)return;const ts=new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');triggerDownload(gpsResultBlob,'\u0623\u0642\u0631\u0628_\u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A_'+ts+'.xlsx');}
 
 // ── Field check — GPS mode ─────────────────────────────
@@ -2957,7 +3023,7 @@ async function fcExportAllExcel(){
     fd.append('rows_json',JSON.stringify(fcAllRows));
     fd.append('sheet_name',sheetName);
     const res=await fetch('/api/export-excel',{method:'POST',body:fd});
-    if(!res.ok)throw new Error(res.statusText);
+    if(!res.ok){const err=await res.json().catch(()=>({detail:res.statusText}));throw new Error(err.detail||res.statusText);}
     triggerDownload(await res.blob(),'كل_اللوحات_'+new Date().toISOString().slice(0,10)+'.xlsx');
     fcShowStatus('ok','✔ تم تحميل ملف كل اللوحات');
   }catch(e){fcShowStatus('err','خطأ في التصدير: '+e.message);}
@@ -2972,7 +3038,7 @@ async function fcExportMatchedExcel(){
     fd.append('rows_json',JSON.stringify(fcMatchedRows));
     fd.append('sheet_name',sheetName);
     const res=await fetch('/api/export-field-check',{method:'POST',body:fd});
-    if(!res.ok)throw new Error(res.statusText);
+    if(!res.ok){const err=await res.json().catch(()=>({detail:res.statusText}));throw new Error(err.detail||res.statusText);}
     triggerDownload(await res.blob(),'اللوحات_المطابقة_'+new Date().toISOString().slice(0,10)+'.xlsx');
     fcShowStatus('ok','✔ تم تحميل ملف اللوحات المطابقة');
   }catch(e){fcShowStatus('err','خطأ في التصدير: '+e.message);}

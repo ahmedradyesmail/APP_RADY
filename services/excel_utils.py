@@ -102,6 +102,52 @@ def apply_excel_style(
             pass
 
 
+def apply_excel_style_matched_merge(
+    ws: openpyxl.worksheet.worksheet.Worksheet,
+    headers: list[str],
+    rows_of_dicts: list[dict],
+    col_source: list[str],
+) -> None:
+    """RTL sheet: colored header bands; body text black for readability."""
+    ws.sheet_view.rightToLeft = True
+
+    ha = Alignment(horizontal="center", vertical="center")
+    ca = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    brd = make_border()
+    hf = Font(name="Arial", bold=True, color="FFFFFF", size=12)
+    hfill_large = PatternFill("solid", start_color="1E40AF")
+    hfill_small = PatternFill("solid", start_color="166534")
+
+    for ci, h in enumerate(headers, 1):
+        src = col_source[ci - 1] if ci - 1 < len(col_source) else "large"
+        cell = ws.cell(row=1, column=ci, value=h)
+        cell.font = hf
+        cell.fill = hfill_large if src == "large" else hfill_small
+        cell.alignment = ha
+        cell.border = brd
+    ws.row_dimensions[1].height = 30
+
+    body_font = Font(name="Arial", size=11, color="000000")
+    fill_large = PatternFill("solid", start_color="DBEAFE")
+    fill_small = PatternFill("solid", start_color="DCFCE7")
+
+    for ri, rd in enumerate(rows_of_dicts, 1):
+        for ci, h in enumerate(headers, 1):
+            src = col_source[ci - 1] if ci - 1 < len(col_source) else "large"
+            cell = ws.cell(row=ri + 1, column=ci, value=rd.get(h, ""))
+            cell.border = brd
+            cell.alignment = ca
+            cell.font = body_font
+            cell.fill = fill_large if src == "large" else fill_small
+
+    for cc in ws.columns:
+        try:
+            length = max(len(str(c.value or "")) for c in cc)
+            ws.column_dimensions[cc[0].column_letter].width = min(length + 4, 40)
+        except Exception:
+            pass
+
+
 def workbook_to_bytes(wb: openpyxl.Workbook) -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
