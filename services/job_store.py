@@ -24,7 +24,8 @@ _use_redis = False
 _memory: dict[str, dict[str, Any]] = {}
 
 TTL_PROCESSING_SEC = 3600
-TTL_TERMINAL_SEC = 600
+# Done/error job payload + on-disk ephemeral results (فرز Excel, تفريغ JSON).
+TTL_TERMINAL_SEC = 3600
 
 
 def new_job_id() -> str:

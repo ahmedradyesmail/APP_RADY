@@ -16,6 +16,11 @@ ENV/
 .env.*
 !.env.example
 
+# ── فرز: temporary Excel outputs on disk ─────────────────
+data/check_results/
+# ── تفريغ صوتي: JSON results on disk ───────────────────
+data/transcribe_results/
+
 # ── Database ─────────────────────────────────────────────
 app.db
 *.db

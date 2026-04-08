@@ -19,6 +19,8 @@ def normalize_plate_value(
     Returns (normalized_plate, is_valid)
     """
     letters = re.sub(r"[^A-Za-z\u0600-\u06FF]+", "", str(letters_raw or ""))
+    # Remove Arabic tatweel and harakat globally (prevents mismatches like "هـ" vs "ه").
+    letters = re.sub(r"[\u0640\u064B-\u065F\u0670]", "", letters)
     numbers = re.sub(r"\D+", "", str(numbers_raw or ""))
 
     if (not letters or not numbers) and full_raw:
@@ -38,6 +40,8 @@ def normalize_plate(s: str) -> str:
     """Normalize plate string for comparison/matching."""
     s = str(s or "").strip()
     s = re.sub(r"[\s\u200b\u200c\u200d\ufeff]+", "", s)
+    # Remove Arabic tatweel and harakat globally (ـ َ ً ُ ٌ ِ ٍ ْ ّ ٰ).
+    s = re.sub(r"[\u0640\u064B-\u065F\u0670]", "", s)
     s = re.sub(r"[أإآٱ]", "ا", s)
     s = re.sub(r"[ى]", "ي", s)
     s = re.sub(r"[ة]", "ه", s)

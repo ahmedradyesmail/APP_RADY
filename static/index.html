@@ -231,7 +231,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .status.warn{display:flex;background:var(--aglow);border:1px solid var(--adim);color:var(--amber)}
 .spin{width:15px;height:15px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
-/* ── Check / الفرز ── */
+/* ── Check / التشيك (Gemini Live) ── */
 .check-hero{text-align:center;padding:1.5rem 1rem 1rem;margin-bottom:.5rem}
 .check-hero h2{font-size:1.4rem;font-weight:800;background:linear-gradient(90deg,var(--violet),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.35rem}
 .check-hero p{font-size:.82rem;color:var(--dim2);max-width:480px;margin:0 auto;line-height:1.7}
@@ -297,6 +297,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .check-export-drop{background:var(--s2);border:1px solid var(--brd2);border-radius:7px;padding:.55rem .75rem;margin-top:.35rem}
 .check-export-drop summary{cursor:pointer;font-family:var(--mono);font-size:.78rem;color:var(--dim2)}
 .check-export-hint{font-size:.68rem;color:var(--dim2);margin-top:.35rem;line-height:1.5}
+#omMatchTableWrap th.om-match-col-small,#omMatchTableWrap td.om-match-col-small{background:rgba(34,197,94,.1);box-shadow:inset 3px 0 0 #16a34a}
+#omMatchTableWrap th.om-match-col-small{color:#166534;font-weight:800}
 .check-run-btn{width:100%;padding:.95rem;background:linear-gradient(135deg,var(--violet),#6d28d9,#5b21b6);border:none;border-radius:10px;color:#fff;font-family:var(--ar);font-size:1rem;font-weight:800;cursor:pointer;transition:all .22s;display:flex;align-items:center;justify-content:center;gap:.55rem;box-shadow:0 4px 20px rgba(139,92,246,.4)}
 .check-run-btn:hover:not(:disabled){opacity:.9;transform:translateY(-2px)}
 .check-run-btn:disabled{opacity:.28;cursor:not-allowed}
@@ -308,6 +310,12 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .check-result-box.teal-box{border-color:rgba(20,184,166,.3)}
 .check-result-box.green-accent{border-color:rgba(34,197,94,.3)}
 .stat-lbl{font-size:.68rem;color:var(--dim2);margin-top:.2rem}
+/* ── Live check (Gemini Live) ── */
+.live-plate-item{padding:.55rem .85rem;border-radius:8px;margin-bottom:.4rem;font-family:var(--mono);font-size:.84rem;font-weight:600}
+.live-plate-item.hit{background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.4);color:var(--green)}
+.live-plate-item.miss{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:var(--red)}
+.live-plate-item.unk{background:var(--s2);border:1px solid var(--brd2);color:var(--dim2)}
+#checkLivePlateList{min-height:2rem;max-height:42vh;overflow-y:auto}
 
 /* ── Activity log ── */
 .log-panel{background:var(--s1);border:1px solid var(--brd);border-radius:var(--r);margin-bottom:1rem;box-shadow:var(--card-shadow);overflow:hidden}
@@ -399,6 +407,10 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
           style="flex:1;padding:.5rem;border-radius:6px;font-family:var(--ar);font-size:.78rem;cursor:pointer;transition:all .18s;border:1px solid var(--brd2);background:transparent;color:var(--dim2)">
           يدوي
         </button>
+        <button id="smtab4" onclick="selectMTab(4)"
+          style="flex:1;padding:.5rem;border-radius:6px;font-family:var(--ar);font-size:.72rem;cursor:pointer;transition:all .18s;border:1px solid var(--brd2);background:transparent;color:var(--dim2)">
+          Live
+        </button>
       </div>
       <div id="sModelManualWrap" style="display:none;margin-bottom:.4rem">
         <input type="text" id="sModelManual" placeholder="مثال: gemini-2.5-pro" oninput="sUpdateSaveState()"/>
@@ -449,17 +461,20 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <h2>&#x1F4D6; تعليمات الاستخدام</h2>
     <div id="instrContent">
       <p><strong>الإعدادات العامة (أعلى الصفحة):</strong> مفتاح API والنموذج مشتركان بين جميع الصفحات.</p>
-      <p>الوضع 1 = gemini-2.5-flash (سريع، مجاني) &nbsp;|&nbsp; الوضع 2 = gemini-2.5-flash (متوازن، مجاني) &nbsp;|&nbsp; الوضع 3 = gemini-1.5-flash (احتياطي، مجاني)</p>
+      <p>الوضع 1 = gemini-2.5-pro (سريع، مجاني) &nbsp;|&nbsp; الوضع 2 = gemini-2.5-flash (متوازن، مجاني) &nbsp;|&nbsp; الوضع 3 = gemini-1.5-flash (احتياطي، مجاني)</p>
       <p><strong>1. التفريغ:</strong> سجّل صوتاً بأرقام اللوحات، أضفه للقائمة وأرسله للنموذج. البيانات تُحفظ تلقائياً.</p>
-      <p><strong>2. التشيك الميداني:</strong></p>
+      <p><strong>2. الفرز:</strong></p>
       <ul>
-        <li>ارفع ملف Excel المرجعي أولاً (يُكتشف عمود اللوحة تلقائياً).</li>
-        <li>سجّل صوتاً مع نقاط GPS.</li>
-        <li>اضغط "تحليل" لاستخراج اللوحات من الصوت.</li>
-        <li>اضغط "التشيك" لمقارنة النتائج بالملف.</li>
-        <li>اللوحات المطابقة تظهر بالأخضر مع رابط Google Maps.</li>
+        <li>ارفع الملف الكبير والملف الصغير (Excel)، ويُكتشف عمود اللوحة تلقائياً لكليهما.</li>
+        <li>اضغط Match لتصدير ملف التطابق؛ إن وُجد عمود GPS في الملف الكبير يمكن ترتيب أقرب المركبات بعد المطابقة (مفتاح ORS في الإعدادات).</li>
       </ul>
-      <p><strong>3. الفرز:</strong> قارن ملفين Excel — يدعم كلمة المرور للملفات المحمية. الكشف عن عمود اللوحة تلقائي فور رفع الملف.</p>
+      <p><strong>3. التشيك (Gemini Live):</strong> ارفع ملف Excel مرجعي واحد، يُكتشف عمود اللوحة تلقائياً، ثم استمع مباشرة أو أدخل لوحة يدوياً. يُستخدم نفس مفتاح Gemini من الإعدادات.</p>
+      <div style="margin:.55rem 0 0;padding:.65rem .85rem;background:var(--s2);border:1px solid var(--brd2);border-radius:8px;font-size:.82rem;line-height:1.65;color:var(--dim2)">
+        <strong style="color:var(--text)">لو اتقطع الاتصال فوراً أو ظهر 403 في السيرفر:</strong>
+        المتصفح يجب أن يتصل بمسار ثابت <span style="font-family:var(--mono)">/ws/check-live</span> على نفس المضيف (مثلاً <span style="font-family:var(--mono)">ws://127.0.0.1:8000/ws/check-live</span>). مسار مثل <span style="font-family:var(--mono)">/ws//127.0.0.1:8000/…</span> خطأ ويُرفض قبل التوثيق.
+        <br/><br/>
+        <strong style="color:var(--text)">لو السيرفر يقفل بـ 1008 من Google بعد الفتح:</strong> ذلك من طرف Google (موديل أو إصدار API). الخادم يستخدم Live على <span style="font-family:var(--mono)">v1beta</span> مع موديل صوتي مدعوم و<code style="font-size:.78rem">outputAudioTranscription</code>؛ تأكد أن المفتاح يدعم نفس الموديل الظاهر في الإعدادات.
+      </div>
       <p><strong>الحذف من القائمة:</strong> يتطلب ضغطتين — الأولى تأكيد، الثانية تنفيذ.</p>
     </div>
   </div>
@@ -480,11 +495,11 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   </div>
 </header>
 
-<!-- TOP NAV: التفريغ | التشيك الميداني | الفرز -->
+<!-- TOP NAV: التفريغ | الفرز | التشيك -->
 <div class="top-nav">
   <button class="tnav-btn tafrigh active" id="navTafrigh"  onclick="switchPage('tafrigh')">&#x1F3D9; التفريغ</button>
-  <button class="tnav-btn field"          id="navField"    onclick="switchPage('field')">&#x1F50D; التشيك الميداني</button>
-  <button class="tnav-btn checkpage"      id="navCheck"    onclick="switchPage('check')">&#x2705; الفرز</button>
+  <button class="tnav-btn field"          id="navField"    onclick="switchPage('field')">&#x1F50D; الفرز</button>
+  <button class="tnav-btn checkpage"      id="navCheck"    onclick="switchPage('check')">&#x2705; التشيك</button>
   <button class="tnav-btn checkpage"      id="navGmaps"    onclick="switchPage('gmaps')">&#x1F5FA;&#xFE0F; Google Maps</button>
   <button class="tnav-btn checkpage"      id="navAdmin"    onclick="switchPage('admin')" style="display:none">&#x1F6E1;&#xFE0F; Admin</button>
 </div>
@@ -660,262 +675,79 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 </div><!-- /pageTafrigh -->
 
 
-<!-- ═══════════ PAGE: FIELD CHECK ═══════════ -->
+<!-- ═══════════ PAGE: FIELD (الفرز — مطابقة ملفين + GPS) ═══════════ -->
 <div id="pageField" style="display:none">
-
-<div class="field-hero">
-  <h2>&#x1F50D; التشيك الميداني</h2>
-  <p>ارفع ملف المرجع &#x2190; سجّل صوتاً مع GPS &#x2190; اضغط "التشيك" لتفريغ اللوحات ومطابقتها مباشرةً.</p>
-</div>
-
-<!-- Settings -->
-<div class="panel">
-  <div class="ptitle teal">&#x2699;&#xFE0F; الإعدادات</div>
-  <div class="row2">
-    <div><label class="lbl">اسم المسجّل</label><input type="text" id="fcRecorderName" placeholder="أدخل اسمك"/></div>
-    <div><label class="lbl">اسم ورقة Excel</label><input type="text" id="fcSheetName" value="التشيك الميداني"/></div>
-  </div>
-</div>
-
-<!-- Step 1 — Reference file -->
-<div class="panel teal-accent">
-  <div class="ptitle teal">&#x1F4C2; الخطوة 1 &mdash; رفع ملف المرجع</div>
-  <p style="font-size:.78rem;color:var(--dim2);margin-bottom:.9rem">ارفع ملف Excel الذي يحتوي على أرقام اللوحات المطلوبة.</p>
-  <div class="upload-zone teal-zone" id="fcDropRef" onclick="document.getElementById('fcRefIn').click()"
-       ondragover="event.preventDefault();this.classList.add('drag')"
-       ondragleave="this.classList.remove('drag')" ondrop="fcHandleDropRef(event)">
-    <div class="icon">&#x1F4CA;</div>
-    <p><strong>اضغط أو اسحب ملف Excel</strong></p>
-    <p style="font-size:.72rem;margin-top:.2rem">xlsx &middot; xls</p>
-  </div>
-  <div class="file-name-row">
-    <span class="fname teal" id="fcRefFname"></span>
-    <button class="rm-btn" id="fcRemoveRefBtn" onclick="fcRemoveRefFile()">&#x2715; إزالة</button>
-  </div>
-  <input type="file" id="fcRefIn" accept=".xlsx,.xls" onchange="fcOnRefFile(this.files[0])"/>
-  <div style="margin-top:.75rem">
-    <label class="lbl">عمود رقم اللوحة في الملف المرجعي</label>
-    <div class="col-detect-row">
-      <select id="fcRefCol" class="teal-focus" onchange="fcCheckReady()">
-        <option value="">اختر عموداً…</option>
-      </select>
-      <span class="detect-badge pending" id="fcRefColBadge">&#x2014;</span>
-    </div>
-  </div>
-  <div class="status" id="fcRefStatus" style="margin-top:.6rem;margin-bottom:0">
-    <div class="spin" id="fcRefSpin" style="display:none"></div><span id="fcRefStatusTxt"></span>
-  </div>
-  <div class="fc-plate-check">
-    <label class="lbl">تشيك لوحة سيارة واحدة</label>
-    <div class="fc-plate-check-row">
-      <input
-        type="text"
-        id="fcPlateLookupInput"
-        class="fc-plate-check-input"
-        placeholder="اكتب رقم اللوحة هنا"
-        oninput="fcResetPlateLookupUI()"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();fcCheckSinglePlate();}"
-      />
-      <button type="button" id="fcPlateLookupBtn" class="fc-plate-check-btn" onclick="fcCheckSinglePlate()">فحص</button>
-    </div>
-    <div id="fcPlateLookupState" class="fc-plate-check-state">اكتب لوحة واضغط فحص</div>
-  </div>
-  <!-- Import existing Excel — available before recording -->
-  <div style="margin-top:.85rem;padding-top:.85rem;border-top:1px solid var(--brd)">
-    <label class="lbl" style="margin-bottom:.5rem">&#x1F4E4; رفع Excel موجود (إضافة للقائمة)</label>
-    <button class="tb-btn outline" style="width:100%" onclick="document.getElementById('fcXlsIn').click()">
-      &#x1F4E4; رفع Excel موجود
-    </button>
-    <input type="file" id="fcXlsIn" accept=".xlsx,.xls" onchange="fcImportExcel(this.files[0])"/>
-  </div>
-</div>
-
-<!-- Step 2 — Recording -->
-<div class="panel">
-  <div class="ptitle teal">&#x1F3D9; الخطوة 2 &mdash; التسجيل (أقصى 5 دقائق)</div>
-  <div class="rec-section">
-    <div class="btn-pair">
-      <div class="btn-col">
-        <div class="ring-shell" id="fcRingShell">
-          <div class="rring"></div><div class="rring"></div><div class="rring"></div>
-          <button id="fcRecBtn" class="rec-btn-base" onclick="fcOnRecBtnClick()"><span id="fcRecIcon">&#x23FA;</span></button>
-        </div>
-        <span class="btn-lbl" id="fcRecLbl">اضغط للتسجيل</span>
-      </div>
-      <div class="btn-col">
-        <button id="fcGpsPinBtn" class="gps-pin-btn" onclick="fcCapturePin()" disabled>&#x1F4CD;</button>
-        <span class="btn-lbl pin-cnt" id="fcPinCount">0 نقطة</span>
-      </div>
-    </div>
-    <div class="rec-choices" id="fcRecChoices">
-      <button class="choice-btn cont"   onclick="fcContinueRec()">&#x25B6; متابعة التسجيل</button>
-      <button class="choice-btn newrec" onclick="fcStartNewRec()">&#x23FA; تسجيل جديد</button>
-      <button class="choice-btn" onclick="fcDoCheck()" id="fcCheckInline"
-              style="border-color:var(--teal);color:#fff;background:linear-gradient(135deg,var(--teal),#0d9488);border-width:0;box-shadow:0 2px 10px rgba(20,184,166,.4)">
-        &#x1F50D; التشيك
-      </button>
-    </div>
-    <div class="timer" id="fcTimer">00:00 / 05:00</div>
-    <div class="rec-progress" id="fcRecProgress"><div class="rec-bar" id="fcRecBar"></div></div>
-    <div class="audio-wrap" id="fcAudioWrap" style="width:100%;max-width:480px">
-      <div class="audio-custom">
-        <button class="play-pause" id="fcPP" onclick="togglePlay('fc')">&#x25B6;</button>
-        <div class="progress-wrap" id="fcPW" onclick="seekAudio('fc',event)">
-          <div class="progress-fill" id="fcPF"></div><div class="progress-thumb" id="fcPT"></div>
-        </div>
-        <span class="time-txt" id="fcTT">0:00 / 0:00</span>
-        <button class="dl-audio-btn" onclick="fcDownloadAudio()">&#x2B07; تسجيل</button>
-      </div>
-      <div class="speed-row">
-        <label>السرعة</label>
-        <input type="range" id="fcSpd" min=".5" max="3" step=".25" value="1" oninput="setSpd('fc')"/>
-        <span class="spv" id="fcSpdV">1.00&times;</span>
-      </div>
-      <audio id="fcAudio" preload="auto"></audio>
-    </div>
-    <div class="rec-lbl" id="fcRecLbl2"></div>
-  </div>
-  <div class="mode-chips">
-    <div class="mchip"    id="fcMM" onclick="fcSetMode('manual')">&#x1F446; يدوي</div>
-    <div class="mchip sel" id="fcMA" onclick="fcSetMode('auto')">&#x23F1; تلقائي (كل N ثانية)</div>
-  </div>
-  <div id="fcAutoOpts" style="display:block;margin-bottom:.8rem">
-    <label class="lbl">الفترة بين النقاط (ثانية)</label>
-    <input type="number" id="fcGpsInt" value="5" min="1" max="120" style="width:110px"/>
-  </div>
-  <div class="ginfo">
-    <div class="gc"><label>خط العرض</label><div class="v" id="fcGLat">&#x2014;</div></div>
-    <div class="gc"><label>خط الطول</label><div class="v" id="fcGLng">&#x2014;</div></div>
-    <div class="gc"><label>الدقة (m)</label><div class="v" id="fcGAcc">&#x2014;</div></div>
-    <div class="gc"><label>نقاط</label><div class="v" id="fcGCnt">0</div></div>
-  </div>
-  <div class="gstatus"><div class="dot" id="fcGDot"></div><span id="fcGTxt">في انتظار التسجيل</span></div>
-  <div class="glog" id="fcGLog"><span>سيبدأ تسجيل الإحداثيات مع بدء التسجيل …</span></div>
-</div>
-
-<!-- Status bar -->
-<div class="status" id="fcStatusBar"><div class="spin" id="fcSpin" style="display:none"></div><span id="fcStatusTxt"></span></div>
-
-<!-- All extracted plates (cumulative) -->
-<div id="fcExtractedSection" style="display:none">
-  <div class="panel">
-    <div class="ptitle teal">
-      &#x1F4CB; جميع اللوحات المسجّلة
-      <span id="fcRowCount" style="font-size:.7rem;font-weight:400;color:var(--dim2)">0 لوحة</span>
-    </div>
-    <div class="excel-toolbar">
-      <button class="tb-btn teal-btn" onclick="fcExportAllExcel()">&#x2B07; تحميل Excel (كل اللوحات)</button>
-      <button class="tb-btn" onclick="fcCheckAll()"
-              style="background:linear-gradient(135deg,var(--teal),#0d9488);color:#fff;border:none;box-shadow:0 2px 10px rgba(20,184,166,.3)">
-        &#x1F50D; تشيك الكل
-      </button>
-      <button class="tb-btn danger" onclick="fcClearAll()" style="margin-right:auto">&#x1F5D1; مسح الكل</button>
-      <span class="row-count" id="fcAllCount">0 لوحة</span>
-    </div>
-    <div class="tbl-outer">
-      <table>
-        <thead><tr><th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الشارع</th><th>تفاصيل الموقع</th><th>نوع المركبة</th><th>اسم المسجّل</th><th>موقع الشارع</th></tr></thead>
-        <tbody id="fcExtractedBody"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- Matched results -->
-<div id="fcResultSection" style="display:none">
-  <div class="panel green-accent">
-    <div class="ptitle green">&#x2705; نتائج التشيك &mdash; اللوحات المطابقة للتسجيل الأخير</div>
-    <div class="result-stats" style="margin-bottom:1rem">
-      <div class="stat-card"><div class="stat-n green" id="fcMatchedCount">&#x2014;</div><div class="stat-lbl">لوحة مطابقة</div></div>
-      <div class="stat-card"><div class="stat-n red"   id="fcUnmatchedCount">&#x2014;</div><div class="stat-lbl">غير موجودة في الملف</div></div>
-      <div class="stat-card"><div class="stat-n" style="color:var(--teal)" id="fcTotalCount">&#x2014;</div><div class="stat-lbl">مستخرج من التسجيل الأخير</div></div>
-    </div>
-    <div class="tbl-outer" style="margin-bottom:1rem">
-      <table>
-        <thead><tr><th>رقم اللوحة &#x2705;</th><th>خريطة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الشارع</th><th>تفاصيل الموقع</th><th>نوع المركبة</th><th>اسم المسجّل</th><th>موقع الشارع</th></tr></thead>
-        <tbody id="fcMatchedBody"></tbody>
-      </table>
-    </div>
-    <div style="display:flex;gap:.6rem"><button class="dl-btn teal-dl" style="flex:2" onclick="fcExportMatchedExcel()">&#x2B07; تحميل Excel (المطابقة)</button><button class="tb-btn danger" style="flex:1;padding:.8rem;border-radius:9px" onclick="fcClearMatchedResults()">&#x1F5D1; مسح</button></div>
-  </div>
-</div>
-
-</div><!-- /pageField -->
-
-
-<!-- ═══════════ PAGE: CHECK (الفرز) ═══════════ -->
-<div id="pageCheck" style="display:none">
   <div class="check-hero">
-    <h2>&#x2705; الفرز &mdash; مطابقة اللوحات</h2>
-    <p>ارفع الملف الكبير والملف الصغير، وسيتم اكتشاف عمود اللوحة تلقائياً والمطابقة فور الضغط.</p>
+    <h2>&#x1F50D; الفرز &mdash; مطابقة اللوحات</h2>
+    <p>ارفع الملف الكبير والملف الصغير، وسيتم اكتشاف عمود اللوحة تلقائياً والمطابقة فور الضغط. يدعم تصدير Excel ومطابقة GPS عند وجود عمود GPS في الملف الكبير.</p>
   </div>
   <div class="file-grid">
     <div class="file-card sky-card">
       <div class="fc-label sky">&#x1F4C2; الملف الكبير <span class="fc-badge large-badge">مصدر البيانات</span></div>
-      <div class="upload-zone" id="dropLarge" onclick="document.getElementById('largeFileIn').click()"
+      <div class="upload-zone" id="omDropLarge" onclick="document.getElementById('omLargeFileIn').click()"
            ondragover="event.preventDefault();this.classList.add('drag')"
-           ondragleave="this.classList.remove('drag')" ondrop="handleDropCheck(event,'large')">
+           ondragleave="this.classList.remove('drag')" ondrop="omHandleDropCheck(event,'large')">
         <div class="icon">&#x1F4CA;</div><p><strong>اضغط أو اسحب</strong></p>
         <p style="font-size:.72rem;margin-top:.2rem">xlsx &middot; xls (قد يكون محمياً)</p>
       </div>
       <div class="file-name-row">
-        <span class="fname" id="largeFname"></span>
-        <button class="rm-btn" id="removeLargeBtn" onclick="removeCheckFile('large')">&#x2715; إزالة</button>
+        <span class="fname" id="omLargeFname"></span>
+        <button class="rm-btn" id="omRemoveLargeBtn" onclick="omRemoveCheckFile('large')">&#x2715; إزالة</button>
       </div>
-      <input type="file" id="largeFileIn" accept=".xlsx,.xls" onchange="onCheckFileChange(this.files[0],'large')"/>
+      <input type="file" id="omLargeFileIn" accept=".xlsx,.xls" onchange="omOnCheckFileChange(this.files[0],'large')"/>
       <div class="pw-row">
         <div style="flex:1">
           <label class="lbl">&#x1F512; كلمة المرور (إن وجدت)</label>
-          <input type="password" id="largePw" placeholder="اتركه فارغاً إن لم يكن محمياً" oninput="resetCheckDetect()"/>
+          <input type="password" id="omLargePw" placeholder="اتركه فارغاً إن لم يكن محمياً" oninput="omResetCheckDetect()"/>
         </div>
-        <button class="pw-toggle" onclick="togglePw('largePw',this)" title="&#x625;&#x638;&#x647;&#x627;&#x331;/&#x625;&#x62E;&#x641;&#x627;&#x621;">&#x1F441;</button>
-        <button class="pw-confirm" onclick="confirmLargePw()" title="تأكيد كلمة المرور واكتشاف العمود تلقائياً">تاكيد</button>
+        <button class="pw-toggle" onclick="omTogglePw('omLargePw',this)" title="إظهار/إخفاء">&#x1F441;</button>
+        <button class="pw-confirm" onclick="omConfirmLargePw()" title="تأكيد كلمة المرور واكتشاف العمود تلقائياً">تاكيد</button>
       </div>
       <div style="margin-top:.65rem"><label class="lbl">عمود اللوحة في الملف الكبير</label>
         <div class="col-detect-row">
-          <select id="largeCol" onchange="onManualColInput('large')">
+          <select id="omLargeCol" onchange="omOnManualColInput('large')">
             <option value="">اختر عموداً…</option>
           </select>
-          <span class="detect-badge pending" id="largeColBadge">&mdash;</span>
+          <span class="detect-badge pending" id="omLargeColBadge">&mdash;</span>
         </div>
       </div>
       <div style="margin-top:.65rem">
         <label class="lbl">أعمدة Excel (الملف الكبير)</label>
-        <details class="check-export-drop" id="checkLargeExportDrop">
+        <details class="check-export-drop" id="omCheckLargeExportDrop">
           <summary>اختر الأعمدة الظاهرة في ورقة التطابق…</summary>
-          <div id="checkLargeExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
+          <div id="omLargeExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
         </details>
-        <p class="check-export-hint">رأس العمود بألوان مميّزة؛ نص الخلايا أسود. إن لم تختر شيئاً هنا، يُصدَّر كل أعمدة الملف الكبير.</p>
+        <p class="check-export-hint">يُحدَّد تلقائياً أعمدة المركبة فقط (لون أساسي، نوع تسجيل اللوحة، طراز، صانع) وما يشابهها. باقي الأعمدة يدوياً. إن لم تختر شيئاً، يُصدَّر كل أعمدة الملف الكبير.</p>
       </div>
     </div>
     <div class="file-card violet-card">
       <div class="fc-label violet">&#x1F4CB; الملف الصغير <span class="fc-badge small-badge">قائمة البحث</span></div>
-      <div class="upload-zone" id="dropSmall" onclick="document.getElementById('smallFileIn').click()"
+      <div class="upload-zone" id="omDropSmall" onclick="document.getElementById('omSmallFileIn').click()"
            ondragover="event.preventDefault();this.classList.add('drag')"
-           ondragleave="this.classList.remove('drag')" ondrop="handleDropCheck(event,'small')">
+           ondragleave="this.classList.remove('drag')" ondrop="omHandleDropCheck(event,'small')">
         <div class="icon">&#x1F50D;</div><p><strong>اضغط أو اسحب</strong></p>
         <p style="font-size:.72rem;margin-top:.2rem">xlsx &middot; xls</p>
       </div>
       <div class="file-name-row">
-        <span class="fname violet" id="smallFname"></span>
-        <button class="rm-btn" id="removeSmallBtn" onclick="removeCheckFile('small')">&#x2715; إزالة</button>
+        <span class="fname violet" id="omSmallFname"></span>
+        <button class="rm-btn" id="omRemoveSmallBtn" onclick="omRemoveCheckFile('small')">&#x2715; إزالة</button>
       </div>
-      <input type="file" id="smallFileIn" accept=".xlsx,.xls" onchange="onCheckFileChange(this.files[0],'small')"/>
+      <input type="file" id="omSmallFileIn" accept=".xlsx,.xls" onchange="omOnCheckFileChange(this.files[0],'small')"/>
       <div style="margin-top:.75rem"><label class="lbl">عمود اللوحة في الملف الصغير</label>
         <div class="col-detect-row">
-          <select id="smallCol" onchange="onManualColInput('small')">
+          <select id="omSmallCol" onchange="omOnManualColInput('small')">
             <option value="">اختر عموداً…</option>
           </select>
-          <span class="detect-badge pending" id="smallColBadge">&mdash;</span>
+          <span class="detect-badge pending" id="omSmallColBadge">&mdash;</span>
         </div>
       </div>
       <div style="margin-top:.65rem">
         <label class="lbl">أعمدة Excel (الملف الصغير)</label>
-        <details class="check-export-drop" id="checkSmallExportDrop">
+        <details class="check-export-drop" id="omCheckSmallExportDrop">
           <summary>اختر الأعمدة الظاهرة في ورقة التطابق…</summary>
-          <div id="checkSmallExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
+          <div id="omSmallExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
         </details>
-        <p class="check-export-hint">مثل الملف الكبير: يُحدَّد كل العمود تلقائياً؛ يمكنك تعديل الاختيار. بادئة «صغير —» في عنوان العمود في Excel.</p>
+        <p class="check-export-hint">نفس قاعدة التحديد التلقائي. في ملف التطابق تُزال كلمة «صغير» من عناوين الأعمدة؛ أعمدة الملف الصغير تُميَّز باللون الأخضر في Excel وفي المعاينة.</p>
       </div>
       <div style="margin-top:.65rem;padding:.75rem;background:var(--s2);border:1px solid var(--brd);border-radius:8px">
         <p style="font-size:.73rem;color:var(--dim2);line-height:1.6">&#x1F4A1; الأعمدة المكتشفة تلقائياً:<br/>
@@ -924,35 +756,35 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     </div>
   </div>
 
-  <div class="status" id="checkStatus"><div class="spin" id="checkSpin" style="display:none"></div><span id="checkStatusTxt"></span></div>
+  <div class="status" id="omFieldStatus"><div class="spin" id="omFieldSpin" style="display:none"></div><span id="omFieldStatusTxt"></span></div>
 
   <div class="check-actions">
-    <button class="check-run-btn" id="checkMatchBtn" onclick="runMatch()" disabled>
+    <button class="check-run-btn" id="omMatchBtn" onclick="omRunMatch()" disabled>
       Match &mdash; &#x1F50D; مطابقة وتصدير Excel
     </button>
   </div>
 
-  <div class="check-result-box" id="checkResultBox">
+  <div class="check-result-box" id="omResultBox">
     <div class="ptitle violet">&#x1F4CA; نتيجة المطابقة</div>
     <div class="result-stats">
-      <div class="stat-card"><div class="stat-n green" id="rMatched">&mdash;</div><div class="stat-lbl">صفوف مُطابَقة</div></div>
-      <div class="stat-card"><div class="stat-n violet" id="rPlates">&mdash;</div><div class="stat-lbl">مطابقات من الصغير</div></div>
-      <div class="stat-card"><div class="stat-n red" id="rUnmatched">&mdash;</div><div class="stat-lbl">غير مطابَقة</div></div>
+      <div class="stat-card"><div class="stat-n green" id="omRMatched">&mdash;</div><div class="stat-lbl">صفوف مُطابَقة</div></div>
+      <div class="stat-card"><div class="stat-n violet" id="omRPlates">&mdash;</div><div class="stat-lbl">مطابقات من الصغير</div></div>
+      <div class="stat-card"><div class="stat-n red" id="omRUnmatched">&mdash;</div><div class="stat-lbl">غير مطابَقة</div></div>
     </div>
     <div style="font-family:var(--mono);font-size:.73rem;color:var(--dim2);margin-bottom:.9rem;line-height:1.7">
-      عمود الكبير: <span style="color:var(--sky)" id="rLargeCol">&mdash;</span> &nbsp;|&nbsp; عمود الصغير: <span style="color:var(--violet)" id="rSmallCol">&mdash;</span>
+      عمود الكبير: <span style="color:var(--sky)" id="omRLargeCol">&mdash;</span> &nbsp;|&nbsp; عمود الصغير: <span style="color:var(--violet)" id="omRSmallCol">&mdash;</span>
     </div>
-    <p id="checkMatchTruncNote" style="display:none;font-size:.72rem;color:var(--amber);margin-bottom:.6rem"></p>
-    <div class="tbl-outer" id="checkMatchTableWrap" style="display:none;margin-bottom:1rem;max-height:min(70vh,520px);overflow:auto">
+    <p id="omMatchTruncNote" style="display:none;font-size:.72rem;color:var(--amber);margin-bottom:.6rem"></p>
+    <div class="tbl-outer" id="omMatchTableWrap" style="display:none;margin-bottom:1rem;max-height:min(70vh,520px);overflow:auto">
       <table style="font-size:.78rem">
-        <thead id="checkMatchThead"></thead>
-        <tbody id="checkMatchTbody"></tbody>
+        <thead id="omMatchThead"></thead>
+        <tbody id="omMatchTbody"></tbody>
       </table>
     </div>
-    <button class="dl-btn" id="checkDlBtn" onclick="openExcelResult()" style="display:none">&#x1F4C2; فتح في Excel على الجهاز</button>
+    <button class="dl-btn" id="omDlBtn" onclick="omOpenExcelResult()" style="display:none">&#x1F4C2; فتح في Excel على الجهاز</button>
   </div>
 
-  <div id="gpsMatchSection" style="display:none">
+  <div id="omGpsMatchSection" style="display:none">
     <div class="panel teal-accent" style="margin-top:.5rem">
       <div class="ptitle teal">&#x1F4CD; إعدادات مطابقة GPS</div>
       <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;padding:.6rem .9rem;background:rgba(20,184,166,.08);border:1px solid rgba(20,184,166,.25);border-radius:8px">
@@ -962,31 +794,30 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <div style="margin-bottom:.9rem">
         <label class="lbl">&#x1F4CD; موقعك الحالي (نقطة الانطلاق)</label>
         <div style="display:flex;gap:.45rem;align-items:center;flex-wrap:wrap">
-          <input type="text" id="gpsMyLat" placeholder="خط العرض" class="teal-focus" style="flex:1;min-width:110px" oninput="setCheckLocDot('on','تم الإدخال يدوياً')"/>
-          <input type="text" id="gpsMyLon" placeholder="خط الطول" class="teal-focus" style="flex:1;min-width:110px" oninput="setCheckLocDot('on','تم الإدخال يدوياً')"/>
-          <button class="tb-btn outline" onclick="refreshCheckLoc()" id="checkLocBtn" style="white-space:nowrap">&#x1F504; تحديث</button>
+          <input type="text" id="omGpsMyLat" placeholder="خط العرض" class="teal-focus" style="flex:1;min-width:110px" oninput="omSetCheckLocDot('on','تم الإدخال يدوياً')"/>
+          <input type="text" id="omGpsMyLon" placeholder="خط الطول" class="teal-focus" style="flex:1;min-width:110px" oninput="omSetCheckLocDot('on','تم الإدخال يدوياً')"/>
+          <button class="tb-btn outline" onclick="omRefreshCheckLoc()" id="omGpsLocBtn" style="white-space:nowrap">&#x1F504; تحديث</button>
         </div>
         <div class="gstatus" style="margin-top:.4rem">
-          <div class="dot" id="checkLocDot"></div>
-          <span id="checkLocTxt" style="font-size:.72rem">لم يتم تحديد الموقع بعد</span>
+          <div class="dot" id="omGpsLocDot"></div>
+          <span id="omGpsLocTxt" style="font-size:.72rem">لم يتم تحديد الموقع بعد</span>
         </div>
       </div>
-      <div id="gpsProgress" style="display:none;margin-bottom:.85rem">
-        <div class="gps-prog-wrap"><div class="gps-prog-fill" id="gpsProgFill"></div></div>
-        <div id="gpsProgLbl" style="font-size:.71rem;color:var(--dim2);margin-top:.4rem;text-align:center;font-family:var(--mono)"></div>
+      <div id="omGpsProgress" style="display:none;margin-bottom:.85rem">
+        <div class="gps-prog-wrap"><div class="gps-prog-fill" id="omGpsProgFill"></div></div>
+        <div id="omGpsProgLbl" style="font-size:.71rem;color:var(--dim2);margin-top:.4rem;text-align:center;font-family:var(--mono)"></div>
       </div>
     </div>
   </div>
 
-  <div class="check-result-box green-accent" id="gpsResultBox">
+  <div class="check-result-box green-accent" id="omGpsResultBox">
     <div class="ptitle green">&#x2705; نتيجة مطابقة GPS &mdash; اللوحات المطابقة</div>
     <div class="result-stats">
-      <div class="stat-card"><div class="stat-n green" id="gpsRSucc">&mdash;</div><div class="stat-lbl">مركبة نجحت</div></div>
-      <div class="stat-card"><div class="stat-n red"   id="gpsRFail">&mdash;</div><div class="stat-lbl">فشلت / بدون مسار</div></div>
-      <div class="stat-card"><div class="stat-n green" id="gpsRNearest">&mdash;</div><div class="stat-lbl">أقرب مركبة</div></div>
+      <div class="stat-card"><div class="stat-n green" id="omGpsRSucc">&mdash;</div><div class="stat-lbl">مركبة نجحت</div></div>
+      <div class="stat-card"><div class="stat-n red"   id="omGpsRFail">&mdash;</div><div class="stat-lbl">فشلت / بدون مسار</div></div>
+      <div class="stat-card"><div class="stat-n green" id="omGpsRNearest">&mdash;</div><div class="stat-lbl">أقرب مركبة</div></div>
     </div>
-    <!-- Results table shown on page before download -->
-    <div class="tbl-outer" id="gpsResultTableWrap" style="margin-bottom:1rem;display:none">
+    <div class="tbl-outer" id="omGpsResultTableWrap" style="margin-bottom:1rem;display:none">
       <table>
         <thead>
           <tr>
@@ -1000,11 +831,89 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
             <th>تاريخ التسجيل</th>
           </tr>
         </thead>
-        <tbody id="gpsResultTableBody"></tbody>
+        <tbody id="omGpsResultTableBody"></tbody>
       </table>
     </div>
-    <button class="dl-btn teal-dl" onclick="downloadGpsResult()">&#x2B07; تحميل Excel (مرتب حسب الأقرب)</button>
+    <button class="dl-btn teal-dl" onclick="omDownloadGpsResult()">&#x2B07; تحميل Excel (مرتب حسب الأقرب)</button>
   </div>
+
+  <div id="omFieldHeadersHint" style="display:none;margin-bottom:1rem">
+    <div class="panel violet-accent">
+      <div class="ptitle violet">&#x26A0;&#xFE0F; اختر عمود اللوحة يدوياً</div>
+      <div id="omFieldHeadersContent" style="font-size:.83rem;line-height:1.8"></div>
+    </div>
+  </div>
+</div><!-- /pageField -->
+
+
+<!-- ═══════════ PAGE: CHECK (التشيك — Gemini Live) ═══════════ -->
+<div id="pageCheck" style="display:none">
+  <div class="check-hero">
+    <h2>&#x2705; التشيك &mdash; مطابقة مباشرة</h2>
+    <p>ملف Excel مرجعي واحد، اكتشاف تلقائي لعمود اللوحة، ثم استماع مباشر مع النموذج أو إدخال لوحة يدوياً. الأخضر = موجود في الملف، الأحمر = غير موجود.</p>
+  </div>
+
+  <div class="panel violet-accent">
+    <div class="ptitle violet">&#x1F4C2; ملف Excel المرجعي</div>
+    <div class="upload-zone" id="dropLarge" onclick="document.getElementById('largeFileIn').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')" ondrop="handleDropCheck(event,'large')">
+      <div class="icon">&#x1F4CA;</div><p><strong>اضغط أو اسحب</strong></p>
+      <p style="font-size:.72rem;margin-top:.2rem">xlsx &middot; xls (قد يكون محمياً بكلمة مرور)</p>
+    </div>
+    <div class="file-name-row">
+      <span class="fname" id="largeFname"></span>
+      <button class="rm-btn" id="removeLargeBtn" onclick="removeCheckFile('large')">&#x2715; إزالة</button>
+    </div>
+    <input type="file" id="largeFileIn" accept=".xlsx,.xls" onchange="onCheckFileChange(this.files[0],'large')"/>
+    <div class="pw-row">
+      <div style="flex:1">
+        <label class="lbl">&#x1F512; كلمة المرور (إن وجدت)</label>
+        <input type="password" id="largePw" placeholder="اتركه فارغاً إن لم يكن محمياً" oninput="resetCheckDetect()"/>
+      </div>
+      <button class="pw-toggle" onclick="togglePw('largePw',this)" title="إظهار/إخفاء">&#x1F441;</button>
+      <button class="pw-confirm" onclick="confirmLargePw()" title="تأكيد كلمة المرور واكتشاف العمود">تاكيد</button>
+    </div>
+    <div style="margin-top:.65rem"><label class="lbl">عمود اللوحة</label>
+      <div class="col-detect-row">
+        <select id="largeCol" onchange="onManualColInput('large')">
+          <option value="">اختر عموداً…</option>
+        </select>
+        <span class="detect-badge pending" id="largeColBadge">&mdash;</span>
+      </div>
+    </div>
+    <p style="font-size:.72rem;color:var(--dim2);margin-top:.55rem;line-height:1.6">&#x1F4A1; يُفضّل اختيار العمود قبل بدء الاستماع؛ عند الاتصال يُرسل الملف تلقائياً للخادم لمطابقة اللوحات.</p>
+  </div>
+
+  <div class="panel violet-accent" style="margin-top:1rem">
+    <div class="ptitle violet">&#x1F3A4; البث الصوتي &mdash; Gemini Live</div>
+    <div class="gstatus" style="margin-bottom:.65rem">
+      <div class="dot" id="checkLiveDot"></div>
+      <span id="checkLiveWsTxt" style="font-size:.76rem">غير متصل</span>
+    </div>
+    <div id="checkLiveTranscript" class="glog" style="height:auto;min-height:52px;margin-bottom:.85rem;max-height:100px"></div>
+    <button type="button" class="check-run-btn" id="checkLiveToggleBtn" onclick="checkLiveToggleMic()">&#x1F399; ابدأ الاستماع</button>
+    <p style="font-size:.71rem;color:var(--dim2);margin-top:.55rem;line-height:1.55">نفس مفتاح Gemini في &#x2699; الإعدادات. الصوت يُرسل كـ PCM 16kHz. عند انتهاء الجملة أرسل إشارة نهاية الدور تلقائياً.</p>
+  </div>
+
+  <div class="fc-plate-check" style="margin-top:1rem">
+    <div class="lbl" style="margin-bottom:.4rem">&#x270F;&#xFE0F; فحص يدوي</div>
+    <div class="fc-plate-check-row">
+      <input type="text" id="chkManualPlate" class="fc-plate-check-input" placeholder="مثال: وصر 1234" dir="auto"/>
+      <button type="button" class="fc-plate-check-btn" onclick="checkLiveManualLookup()">فحص</button>
+    </div>
+    <div id="chkManualState" class="fc-plate-check-state">يتطلب اتصالاً نشطاً بالبث</div>
+  </div>
+
+  <div class="panel green-accent" style="margin-top:1rem">
+    <div class="ptitle green">&#x1F4CB; لوحات أعادها النموذج</div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.65rem">
+      <button type="button" class="tb-btn outline" onclick="checkLiveClearPlates()">&#x1F5D1; مسح القائمة</button>
+    </div>
+    <div id="checkLivePlateList"></div>
+  </div>
+
+  <div class="status" id="checkStatus"><div class="spin" id="checkSpin" style="display:none"></div><span id="checkStatusTxt"></span></div>
 
   <div id="checkHeadersHint" style="display:none;margin-bottom:1rem">
     <div class="panel violet-accent">
@@ -1095,6 +1004,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 
 
 </div><!-- wrap -->
+<script src="/static/_om_field.js?v=vehiclecols1"></script>
 <script>
 const MAX_REC_SECS=300;
 // ── State ──────────────────────────────────────────────
@@ -1104,8 +1014,12 @@ let liveBlob=null,liveAudioUrl=null,uploadFile=null;
 let liveGps=[],uploadGps=[],autoTimer=null,recTimer=null,recSecs=0;
 let queueItems=[],tableRows=[];
 const pendingDeletes=new Map();
-let checkLargeFile=null,checkSmallFile=null,checkResultBlob=null;
-let checkDetected={large:null,small:null},checkLargeHasGps=false,gpsResultBlob=null;
+let checkLargeFile=null;
+let checkDetected={large:null};
+let checkLiveWs=null,checkLiveMicOn=false,checkLiveAudioCtx=null,checkLiveScriptNode=null,checkLiveMediaStream=null;
+let checkLiveSilenceTimer=null,checkLiveLastVoiceAt=0;
+const CHECK_LIVE_SILENCE_MS=650;
+const CHECK_LIVE_VOICE_RMS_THRESHOLD=0.012;
 let fcRecState='idle',fcMediaRec=null,fcAllChunks=[],fcCurChunks=[];
 let fcLiveBlob=null,fcAudioUrl=null;
 let fcGpsPoints=[],fcAutoTimer=null,fcRecTimer=null,fcRecSecs=0,fcGpsMode='auto';
@@ -1153,11 +1067,14 @@ async function requestFirstVisitPermissions(){
 window.addEventListener('DOMContentLoaded',()=>{
   audioEls.live=document.getElementById('liveAudio');
   audioEls.up=document.getElementById('upAudio');
-  audioEls.fc=document.getElementById('fcAudio');
-  bindAudioPlayer('live');bindAudioPlayer('up');bindAudioPlayer('fc');
-  loadTable();renderTable();loadFcData();
+  const fcAud=document.getElementById('fcAudio');
+  if(fcAud){ audioEls.fc=fcAud; bindAudioPlayer('fc'); }
+  bindAudioPlayer('live');bindAudioPlayer('up');
+  loadTable();renderTable();
+  if(document.getElementById('fcExtractedSection')) loadFcData();
+  if(typeof loadOmPersistedCheckFiles==='function') loadOmPersistedCheckFiles();
   setMode('auto');
-  fcSetMode('auto');
+  if(document.getElementById('fcMM')) fcSetMode('auto');
   loadSettings();
   loadPersistedCheckFiles();
   setMode('auto');
@@ -1189,14 +1106,16 @@ const S_MODELS = {
 const S_MODEL_LABELS = {
   1: 'الوضع 1 — gemini-2.5-flash (سريع، مجاني)',
   2: 'الوضع 2 — gemini-3-flash-preview',
-  3: 'وضع يدوي — أدخل اسم النموذج'
+  3: 'وضع يدوي — أدخل اسم النموذج',
+  4: 'Gemini Live — models/gemini-2.5-flash-native-audio-latest (صفحة التشيك المباشر؛ نفس مفتاح API)'
 };
 
 function openSettings(){
   const ak = localStorage.getItem('sApiKey') || '';
   const ok = localStorage.getItem('sOrsKey') || '';
   const gk = localStorage.getItem('sGoogleMapsKey') || '';
-  const mt = parseInt(localStorage.getItem('sModelTab') || '1');
+  let mt = parseInt(localStorage.getItem('sModelTab') || '1');
+  if(mt < 1 || mt > 4) mt = 1;
   const mm = localStorage.getItem('sModelManual') || '';
   document.getElementById('sApiKey').value   = ak;
   document.getElementById('sOrsKey').value   = ok;
@@ -1219,7 +1138,7 @@ function selectMTab(n){
   _renderMTabs();
 }
 function _renderMTabs(){
-  [1,2,3].forEach(n => {
+  [1,2,3,4].forEach(n => {
     const btn = document.getElementById('smtab'+n);
     if(!btn) return;
     const active = n === _sMTab;
@@ -1262,6 +1181,7 @@ function getOrsKey(){
 }
 function getModelName(){
   const mt = parseInt(localStorage.getItem('sModelTab') || '1');
+  if(mt === 4) return S_MODELS[1] || 'gemini-2.5-flash';
   if(mt === 3){
     const mm = localStorage.getItem('sModelManual') || '';
     return mm || 'gemini-2.5-flash';
@@ -1270,7 +1190,8 @@ function getModelName(){
 }
 
 function loadSettings(){
-  const mt = parseInt(localStorage.getItem('sModelTab') || '1');
+  let mt = parseInt(localStorage.getItem('sModelTab') || '1');
+  if(mt < 1 || mt > 4) mt = 1;
   _sMTab = mt;
 }
 
@@ -1318,21 +1239,22 @@ async function loadPersistedCheckFiles(){
     document.getElementById('largeFname').textContent = '\u{1F4CE} '+m.name;
     document.getElementById('removeLargeBtn').classList.add('show');
     detectColForSide('large');
-    checkRunReady();
   }catch(e){}
 }
 
-// ══ CLEAR MATCHED RESULTS in التشيك ═════════════════════════════════════════
+// ══ CLEAR MATCHED RESULTS (تفريغ / fc) ═════════════════════════════════════════
 function fcClearMatchedResults(){
   fcMatchedRows = [];
   saveFcData();
-  document.getElementById('fcResultSection').style.display = 'none';
-  fcShowStatus('ok', '\u062A\u0645 \u0645\u0633\u062D \u0646\u062A\u0627\u0626\u062C \u0627\u0644\u062A\u0634\u064A\u0643');
+  const rs=document.getElementById('fcResultSection');
+  if(rs) rs.style.display = 'none';
+  if(document.getElementById('fcStatusBar')) fcShowStatus('ok', '\u062A\u0645 \u0645\u0633\u062D \u0646\u062A\u0627\u0626\u062C \u0627\u0644\u062A\u0634\u064A\u0643');
 }
 
 
 // ── Page / theme / modal ──────────────────────────────
 function switchPage(p){
+  if(p!=='check' && typeof checkLiveStopAll==='function') checkLiveStopAll();
   ['tafrigh','field','check','gmaps'].forEach(n=>{
     const el=document.getElementById('page'+n.charAt(0).toUpperCase()+n.slice(1));
     const btn=document.getElementById('nav'+n.charAt(0).toUpperCase()+n.slice(1));
@@ -1929,25 +1851,21 @@ async function pollTranscribeStatus(jobId){
     const r=await fetch('/api/transcribe/status/'+encodeURIComponent(jobId));
     const payload=await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(payload.detail||r.statusText);
-    if(payload.status==='done'&&payload.data) return payload.data;
+    if(payload.status==='done'&&payload.data){
+      const d=payload.data;
+      if(d.storage==='file'&&d.kind==='transcribe'){
+        const tr=await fetch('/api/transcribe/result/'+encodeURIComponent(jobId));
+        const tj=await tr.json().catch(()=>({}));
+        if(!tr.ok) throw new Error(tj.detail||tr.statusText||'تعذّر جلب نتيجة التفريغ');
+        return tj;
+      }
+      return payload.data;
+    }
     if(payload.status==='error') throw new Error(payload.detail||'An internal error occurred. Please try again.');
     await new Promise(res=>setTimeout(res,1200));
   }
   throw new Error('انتهت مهلة انتظار التفريغ');
 }
-async function pollCheckStatus(jobId){
-  const deadline=Date.now()+15*60*1000;
-  while(Date.now()<deadline){
-    const r=await fetch('/api/check/status/'+encodeURIComponent(jobId));
-    const payload=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(payload.detail||r.statusText);
-    if(payload.status==='done'&&payload.data) return payload.data;
-    if(payload.status==='error') throw new Error(payload.detail||'خطأ في المطابقة');
-    await new Promise(res=>setTimeout(res,1200));
-  }
-  throw new Error('انتهت مهلة انتظار المطابقة');
-}
-
 // ── Direct send ───────────────────────────────────────
 async function directSend(){
   const hasAudio=tab==='live'?!!liveBlob:!!uploadFile;
@@ -2177,70 +2095,41 @@ async function importExcel(f){
   }catch(e){showStatus('err','خطأ في الاستيراد: '+e.message);}
   document.getElementById('xlsIn').value='';
 }
-// ── الفرز — full with GPS ─────────────────────────────
+// ── التشيك — Gemini Live ────────────────────────────────
+let checkLiveExcelReady=false;
 function onCheckFileChange(file,side){
-  if(!file)return;
-  if(side==='large'){
-    checkLargeFile=file;
-    document.getElementById('largeFname').textContent='📎 '+file.name;
-    document.getElementById('removeLargeBtn').classList.add('show');
-    if(!document.getElementById('largeCol').value.trim())setBadge('large','pending','...');
-    checkResultBlob=null;
-    document.getElementById('checkResultBox').classList.remove('show');
-    if(typeof renderCheckMatchPreview==='function') renderCheckMatchPreview(null);
-    document.getElementById('checkHeadersHint').style.display='none';
-    detectColForSide('large');
-    persistCheckFile('large',file);
-  } else {
-    checkSmallFile=file;
-    document.getElementById('smallFname').textContent='📎 '+file.name;
-    document.getElementById('removeSmallBtn').classList.add('show');
-    if(!document.getElementById('smallCol').value.trim())setBadge('small','pending','...');
-    checkResultBlob=null;
-    document.getElementById('checkResultBox').classList.remove('show');
-    if(typeof renderCheckMatchPreview==='function') renderCheckMatchPreview(null);
-    detectColForSide('small');
-  }
-  checkRunReady();
+  if(!file||side!=='large')return;
+  checkLargeFile=file;
+  checkLiveExcelReady=false;
+  if(typeof checkLiveStopMicOnly==='function') checkLiveStopMicOnly();
+  document.getElementById('largeFname').textContent='\u{1F4CE} '+file.name;
+  document.getElementById('removeLargeBtn').classList.add('show');
+  if(!document.getElementById('largeCol').value.trim())setBadge('large','pending','...');
+  document.getElementById('checkHeadersHint').style.display='none';
+  document.getElementById('checkHeadersContent').innerHTML='';
+  detectColForSide('large');
+  persistCheckFile('large',file);
 }
-function handleDropCheck(e,side){e.preventDefault();document.getElementById(side==='large'?'dropLarge':'dropSmall').classList.remove('drag');const f=e.dataTransfer.files[0];if(f)onCheckFileChange(f,side);}
-function clearCheckExportList(side){
-  const id=side==='large'?'checkLargeExportList':'checkSmallExportList';
-  const el=document.getElementById(id);
-  if(el) el.innerHTML='';
-}
-function rebuildCheckExportChoices(side,headers,defaultChecked){
-  const id=side==='large'?'checkLargeExportList':'checkSmallExportList';
-  const el=document.getElementById(id);
-  if(!el) return;
-  el.innerHTML='';
-  const on=defaultChecked!==false;
-  (headers||[]).forEach(h=>{
-    if(!h) return;
-    const lab=document.createElement('label');
-    lab.style.cssText='display:flex;align-items:center;gap:.45rem;font-size:.78rem;cursor:pointer;padding:.2rem 0';
-    const cb=document.createElement('input');
-    cb.type='checkbox';
-    cb.value=h;
-    cb.checked=on;
-    cb.className='check-export-cb check-export-'+side;
-    const sp=document.createElement('span');
-    sp.textContent=h;
-    sp.style.fontFamily='var(--mono)';
-    lab.appendChild(cb);
-    lab.appendChild(sp);
-    el.appendChild(lab);
-  });
-}
-function getCheckExportColsJson(side){
-  const boxes=document.querySelectorAll('.check-export-cb.check-export-'+side+':checked');
-  if(!boxes.length) return '[]';
-  return JSON.stringify([...boxes].map(b=>b.value));
+function handleDropCheck(e,side){
+  e.preventDefault();
+  document.getElementById('dropLarge').classList.remove('drag');
+  const f=e.dataTransfer.files[0];
+  if(f) onCheckFileChange(f,'large');
 }
 function removeCheckFile(side){
-  if(side==='large'){checkLargeFile=null;document.getElementById('largeFname').textContent='';document.getElementById('removeLargeBtn').classList.remove('show');document.getElementById('largeFileIn').value='';const lp=document.getElementById('largePw');if(lp)lp.value='';resetColDropdown('large');setBadge('large','pending','\u2014');clearPersistedCheckFile('large');clearCheckExportList('large');}
-  else{checkSmallFile=null;document.getElementById('smallFname').textContent='';document.getElementById('removeSmallBtn').classList.remove('show');document.getElementById('smallFileIn').value='';resetColDropdown('small');setBadge('small','pending','\u2014');clearPersistedCheckFile('small');clearCheckExportList('small');}
-  resetCheckDetect();checkRunReady();
+  if(side!=='large') return;
+  checkLargeFile=null;
+  checkLiveExcelReady=false;
+  if(typeof checkLiveStopAll==='function') checkLiveStopAll();
+  document.getElementById('largeFname').textContent='';
+  document.getElementById('removeLargeBtn').classList.remove('show');
+  document.getElementById('largeFileIn').value='';
+  const lp=document.getElementById('largePw');
+  if(lp) lp.value='';
+  resetColDropdown('large');
+  setBadge('large','pending','\u2014');
+  clearPersistedCheckFile('large');
+  resetCheckDetect();
 }
 function resetColDropdown(side){
   const sel=document.getElementById(side+'Col');
@@ -2262,387 +2151,335 @@ function fillColDropdown(side,headers,selectedVal){
   if(prev && (headers||[]).includes(prev)) sel.value=prev;
 }
 function resetCheckDetect(){
-  checkLargeHasGps=false;gpsResultBlob=null;
-  document.getElementById('gpsMatchSection').style.display='none';
-  document.getElementById('gpsResultBox').classList.remove('show');
-  checkResultBlob=null;
-  if(typeof renderCheckMatchPreview==='function') renderCheckMatchPreview(null);
-  document.getElementById('checkResultBox').classList.remove('show');
   document.getElementById('checkHeadersHint').style.display='none';
-  ['large','small'].forEach(s=>{if(!document.getElementById(s+'Col').value.trim())setBadge(s,'pending','\u2014');});
+  if(!document.getElementById('largeCol').value.trim()) setBadge('large','pending','\u2014');
 }
-function onManualColInput(side){const val=document.getElementById(side+'Col').value.trim();setBadge(side,val?'found':'pending',val?'\u25BE \u0645\u062E\u062A\u0627\u0631':'\u2014');if(!val)autoDetectCols();checkRunReady();}
+function onManualColInput(side){
+  const val=document.getElementById(side+'Col').value.trim();
+  setBadge(side,val?'found':'pending',val?'\u25BE \u0645\u062E\u062A\u0627\u0631':'\u2014');
+  if(!val) autoDetectCols();
+  if(side==='large' && typeof checkLiveSendPlateColumn==='function') checkLiveSendPlateColumn();
+}
 function setBadge(side,state,text){const b=document.getElementById(side+'ColBadge');b.className='detect-badge '+state;b.textContent=text;}
 async function autoDetectCols(){
   if(checkLargeFile) detectColForSide('large');
-  if(checkSmallFile) detectColForSide('small');
 }
 
 async function detectColForSide(side){
+  if(side!=='large' || !checkLargeFile) return;
   const fd=new FormData();
-  if(side==='large'){
-    fd.append('large_file',checkLargeFile);
-    const pw=document.getElementById('largePw').value.trim();
-    if(pw)fd.append('password',pw);
-  } else {
-    fd.append('small_file',checkSmallFile);
-  }
-  setBadge(side,'pending','...');
+  fd.append('large_file',checkLargeFile);
+  const pw=document.getElementById('largePw').value.trim();
+  if(pw) fd.append('password',pw);
+  setBadge('large','pending','...');
   try{
     const res=await fetch('/api/check-headers',{method:'POST',body:fd});
-    if(!res.ok){setBadge(side,'notfound','⚠ خطأ');return;}
+    if(!res.ok){setBadge('large','notfound','\u26A0 \u062E\u0637\u0623');return;}
     const data=await res.json();
-    const info=side==='large'?data.large:data.small;
+    const info=data.large;
     if(!info){return;}
-    if(info.error){setBadge(side,'notfound','⚠ '+info.error.slice(0,30));return;}
-    fillColDropdown(side,info.headers||[],document.getElementById(side+'Col').value.trim());
-    if(info.detected&&!document.getElementById(side+'Col').value.trim()){
-      document.getElementById(side+'Col').value=info.detected;
-      if(side==='large')checkDetected.large=info.detected;
-      else checkDetected.small=info.detected;
-      setBadge(side,'found','✔ تلقائي');
-    } else if(document.getElementById(side+'Col').value.trim()){
-      setBadge(side,'found','▾ مختار');
+    if(info.error){setBadge('large','notfound','\u26A0 '+info.error.slice(0,30));return;}
+    fillColDropdown('large',info.headers||[],document.getElementById('largeCol').value.trim());
+    if(info.detected&&!document.getElementById('largeCol').value.trim()){
+      document.getElementById('largeCol').value=info.detected;
+      checkDetected.large=info.detected;
+      setBadge('large','found','\u2714 \u062A\u0644\u0642\u0627\u0626\u064A');
+    } else if(document.getElementById('largeCol').value.trim()){
+      setBadge('large','found','\u25BE \u0645\u062E\u062A\u0627\u0631');
     } else if(!info.detected){
-      setBadge(side,'notfound','؟ غير مكتشف');
-      if(info.headers&&info.headers.length)showHeadersHint(side,info.headers);
+      setBadge('large','notfound','؟ \u063A\u064A\u0631 \u0645\u0643\u062A\u0634\u0641');
+      if(info.headers&&info.headers.length) showHeadersHint('large',info.headers);
     }
-    if((side==='large'||side==='small')&&!info.error){
-      rebuildCheckExportChoices(side,info.headers||[],true);
-    }
-    if(side==='large'&&!info.error){
-      checkLargeHasGps=!!(info.headers&&info.headers.includes('GPS'));
-      const gs=document.getElementById('gpsMatchSection');
-      if(checkLargeHasGps){
-        gs.style.display='';
-        if(!document.getElementById('gpsMyLat').value.trim())refreshCheckLoc();
-      } else {
-        gs.style.display='none';
-      }
-    }
-    checkRunReady();
-  }catch(e){setBadge(side,'notfound','⚠');}
+    if(typeof checkLiveSendPlateColumn==='function') checkLiveSendPlateColumn();
+  }catch(e){setBadge('large','notfound','\u26A0');}
 }
 function showHeadersHint(side,headers){
+  if(side!=='large') return;
   const box=document.getElementById('checkHeadersHint');
   const content=document.getElementById('checkHeadersContent');
   box.style.display='';
-  const label=side==='large'?'\u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0643\u0628\u064A\u0631':'\u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0635\u063A\u064A\u0631';
-  const ti=side+'Col';
-  content.innerHTML+='<p style="margin-bottom:.5rem"><strong style="color:var(--violet)">'+label+':</strong> \u0627\u0646\u0642\u0631 \u0644\u0627\u062E\u062A\u064A\u0627\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629:</p><div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem">'+
-    headers.map(h=>h?'<button onclick="document.getElementById(\''+ti+'\').value=\''+esc(h)+'\';setBadge(\''+side+'\',\'found\',\'\u270E \u064A\u062F\u0648\u064A\');checkRunReady();document.getElementById(\'checkHeadersHint\').style.display=\'none\'" style="padding:.3rem .7rem;background:var(--s2);border:1px solid var(--brd2);border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:.75rem;color:var(--text);transition:all .18s" onmouseover="this.style.borderColor=\'var(--violet)\';this.style.color=\'var(--violet)\'" onmouseout="this.style.borderColor=\'var(--brd2)\';this.style.color=\'var(--text)\'">'+esc(h)+'</button>':'').join('')+'</div>';
-}
-function checkRunReady(){document.getElementById('checkMatchBtn').disabled=!(checkLargeFile&&checkSmallFile);}
-async function runMatch(){
-  if(!checkLargeFile||!checkSmallFile){showCheckStatus('err','\u064A\u0631\u062C\u0649 \u0631\u0641\u0639 \u0643\u0644\u0627 \u0627\u0644\u0645\u0644\u0641\u064A\u0646');return;}
-  checkResultBlob=null;document.getElementById('checkResultBox').classList.remove('show');
-  renderCheckMatchPreview(null);
-  document.getElementById('checkHeadersHint').style.display='none';document.getElementById('checkHeadersContent').innerHTML='';
-  gpsResultBlob=null;document.getElementById('gpsResultBox').classList.remove('show');
-  document.getElementById('gpsResultTableWrap').style.display='none';
-  document.getElementById('gpsResultTableBody').innerHTML='';
-  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2026',true);document.getElementById('checkMatchBtn').disabled=true;
-  try{
-    const fd=new FormData();fd.append('large_file',checkLargeFile);fd.append('small_file',checkSmallFile);
-    const pw=document.getElementById('largePw').value.trim();if(pw)fd.append('password',pw);
-    const lc=document.getElementById('largeCol').value.trim();if(lc)fd.append('large_col',lc);
-    const sc=document.getElementById('smallCol').value.trim();if(sc)fd.append('small_col',sc);
-    fd.append('large_export_cols_json',getCheckExportColsJson('large'));
-    fd.append('small_export_cols_json',getCheckExportColsJson('small'));
-    const res=await fetch('/api/check',{method:'POST',body:fd});
-    if(!res.ok){
-      const errData=await res.json().catch(()=>({detail:res.statusText}));
-      throw new Error(errData.detail||res.statusText);
-    }
-    const start=await res.json();
-    const jobId=start.job_id;
-    if(!jobId) throw new Error('\u0644\u0645 \u064A\u064F\u0631\u062C\u0639 job_id');
-    const result=await pollCheckStatus(jobId);
-    if(result.kind==='xlsx'){
-      const bin=atob(result.content_b64);
-      const bytes=new Uint8Array(bin.length);
-      for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-      checkResultBlob=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-      showCheckStatus('ok','\u2705 \u062A\u0645\u062A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2014 \u0627\u0644\u0646\u062A\u0627\u0626\u062C \u0623\u062F\u0646\u0627\u0647 \u0648\u064A\u0645\u0643\u0646 \u0641\u062A\u062D\u0647\u0627 \u0641\u064A Excel');
-      const lu=document.getElementById('largeCol').value.trim()||checkDetected.large||'\u2014';
-      const su=document.getElementById('smallCol').value.trim()||checkDetected.small||'\u2014';
-      document.getElementById('rLargeCol').textContent=lu;document.getElementById('rSmallCol').textContent=su;
-      const pv=result.preview;
-      if(pv&&pv.stats){
-        document.getElementById('rMatched').textContent=String(pv.stats.matched_rows!=null?pv.stats.matched_rows:'\u2014');
-        document.getElementById('rPlates').textContent=String(pv.stats.matched_plate_hits!=null?pv.stats.matched_plate_hits:'\u2014');
-        document.getElementById('rUnmatched').textContent=String(pv.stats.unmatched_plates!=null?pv.stats.unmatched_plates:'\u2014');
-      }else{
-        document.getElementById('rMatched').textContent='\u2714';document.getElementById('rPlates').textContent='\u2714';document.getElementById('rUnmatched').textContent='\u2014';
-      }
-      renderCheckMatchPreview(pv||null);
-      document.getElementById('checkDlBtn').style.display='';
-      document.getElementById('checkResultBox').classList.add('show');
-      if(checkLargeHasGps) await runGpsNearestAfterMatch();
-    }else if(result.kind==='json'){
-      const data=result.body;
-      const statusCode=result.status_code;
-      if(statusCode===200&&data.matched===0){
-        showCheckStatus('warn','\u0644\u0627 \u062A\u0648\u062C\u062F \u062A\u0637\u0627\u0628\u0642\u0627\u062A \u2014 \u062A\u062D\u0642\u0642 \u0645\u0646 \u0623\u0633\u0645\u0627\u0621 \u0627\u0644\u0623\u0639\u0645\u062F\u0629 \u0623\u0648 \u0627\u0644\u0645\u062D\u062A\u0648\u0649');
-        document.getElementById('rMatched').textContent='0';document.getElementById('rPlates').textContent='0';
-        document.getElementById('rUnmatched').textContent=data.unmatched??'\u2014';
-        document.getElementById('rLargeCol').textContent=data.large_col_used??'\u2014';document.getElementById('rSmallCol').textContent=data.small_col_used??'\u2014';
-        document.getElementById('checkDlBtn').style.display='none';document.getElementById('checkResultBox').classList.add('show');
-      }else if(statusCode===422){
-        showCheckStatus('err',data.detail||'\u062E\u0637\u0623 \u063A\u064A\u0631 \u0645\u0639\u0631\u0648\u0641');
-        if(data.headers){showHeadersHint(data.code==='COL_NOT_FOUND_SMALL'?'small':'large',data.headers);}
-      }else{
-        showCheckStatus('err',data.detail||'\u062E\u0637\u0623 \u063A\u064A\u0631 \u0645\u0639\u0631\u0648\u0641');
-        if(data.headers){showHeadersHint(data.code==='COL_NOT_FOUND_SMALL'?'small':'large',data.headers);}
-      }
-    }else throw new Error('\u0627\u0633\u062A\u062C\u0627\u0628\u0629 \u063A\u064A\u0631 \u0645\u062A\u0648\u0642\u0639\u0629');
-  }catch(e){showCheckStatus('err','\u062E\u0637\u0623: '+e.message);}
-  finally{
-    document.getElementById('gpsProgress').style.display='none';
-    document.getElementById('checkMatchBtn').disabled=false;
-  }
-}
-function checkIsGpsHeader(h){
-  const t=String(h||'').trim();
-  if(/^GPS$/i.test(t)) return true;
-  if(/^صغير\s*[—-]\s*GPS$/i.test(t)) return true;
-  return false;
-}
-function checkParseGpsCoords(val){
-  if(val==null||val==='') return null;
-  const t=String(val).trim();
-  if(!t.includes(',')) return null;
-  const parts=t.split(',');
-  if(parts.length<2) return null;
-  const lat=parseFloat(parts[0].trim());
-  const lng=parseFloat(parts[1].trim());
-  if(isNaN(lat)||isNaN(lng)) return null;
-  if(Math.abs(lat)>90||Math.abs(lng)>180) return null;
-  return {lat:lat,lng:lng};
-}
-function checkCellDisplayHtml(header,val){
-  const raw=val==null?'':String(val);
-  const coords=checkParseGpsCoords(raw);
-  if(coords&&checkIsGpsHeader(header)){
-    const href='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(coords.lat+','+coords.lng);
-    return '<a class="maps-link" href="'+href+'" target="_blank" rel="noopener" title="فتح الخريطة">&#x1F4CD; فتح الخريطة</a>';
-  }
-  return esc(raw);
-}
-function renderCheckMatchPreview(preview){
-  const wrap=document.getElementById('checkMatchTableWrap');
-  const thead=document.getElementById('checkMatchThead');
-  const tbody=document.getElementById('checkMatchTbody');
-  const note=document.getElementById('checkMatchTruncNote');
-  if(!wrap||!thead||!tbody) return;
-  if(!preview||!preview.headers||!preview.headers.length){
-    wrap.style.display='none';
-    if(note){ note.style.display='none'; note.textContent=''; }
-    thead.innerHTML='';
-    tbody.innerHTML='';
-    return;
-  }
-  if(!preview.rows||!preview.rows.length){
-    thead.innerHTML='<tr>'+preview.headers.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join('')+'</tr>';
-    tbody.innerHTML='';
-    wrap.style.display='';
-    if(note) note.style.display='none';
-    return;
-  }
-  thead.innerHTML='<tr>'+preview.headers.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join('')+'</tr>';
-  tbody.innerHTML='';
-  preview.rows.forEach(function(row){
-    const tr=document.createElement('tr');
-    row.forEach(function(cell,idx){
-      const td=document.createElement('td');
-      td.className='td-gps';
-      td.innerHTML=checkCellDisplayHtml(preview.headers[idx],cell);
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  wrap.style.display='';
-  if(note){
-    if(preview.truncated){
-      note.textContent='عرض أول '+preview.rows.length+' صف من أصل '+preview.total_rows+' — الملف الكامل عند الفتح في Excel.';
-      note.style.display='';
-    }else{
-      note.style.display='none';
-      note.textContent='';
-    }
-  }
-}
-function getCheckMatchExcelFilename(){
-  const ts=new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');
-  return '\u0627\u0644\u062A\u0637\u0627\u0628\u0642\u0627\u062A_'+ts+'.xlsx';
-}
-async function openExcelResult(){
-  if(!checkResultBlob) return;
-  const filename=getCheckMatchExcelFilename();
-  const mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  const file=new File([checkResultBlob],filename,{type:mime});
-  try{
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({files:[file],title:filename});
-      return;
-    }
-  }catch(e){
-    if(e&&e.name==='AbortError') return;
-  }
-  const url=URL.createObjectURL(checkResultBlob);
-  try{
-    const win=window.open(url,'_blank','noopener,noreferrer');
-    if(win){
-      setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(_){} },120000);
-      return;
-    }
-  }catch(_){}
-  try{
-    if(window.showSaveFilePicker){
-      const base=filename.replace(/\.xlsx$/i,'');
-      const h=await window.showSaveFilePicker({
-        suggestedName:base||'التطابقات',
-        types:[{description:'Excel',accept:{[mime]:['.xlsx']}}]
-      });
-      const w=await h.createWritable();
-      await w.write(checkResultBlob);
-      await w.close();
-      try{ URL.revokeObjectURL(url); }catch(_){}
-      showCheckStatus('ok','\u2705 \u062A\u0645 \u062D\u0641\u0638 \u0627\u0644\u0645\u0644\u0641. \u0627\u0641\u062A\u062D\u0647 \u0641\u064A Excel \u0645\u0646 \u0627\u0644\u0645\u0648\u0636\u0639 \u0627\u0644\u0630\u064A \u0627\u062E\u062A\u0631\u062A\u0647.');
-      return;
-    }
-  }catch(e){
-    if(e&&e.name==='AbortError'){ try{ URL.revokeObjectURL(url); }catch(_){} return; }
-  }
-  try{ URL.revokeObjectURL(url); }catch(_){}
-  triggerDownload(checkResultBlob,filename);
-  showCheckStatus('warn','\u062A\u0645 \u062A\u0646\u0632\u064A\u0644 \u0627\u0644\u0645\u0644\u0641 \u2014 \u0627\u0641\u062A\u062D\u0647 \u0645\u0646 \u0627\u0644\u0645\u062C\u0644\u062F \u0623\u0648 \u0627\u0644\u062A\u0646\u0632\u064A\u0644\u0627\u062A \u0641\u064A Excel.');
+  const label='\u0627\u0644\u0645\u0644\u0641';
+  const ti='largeCol';
+  content.innerHTML+='<p style="margin-bottom:.5rem"><strong style="color:var(--violet)">'+label+':</strong> \u0627\u062E\u062A\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629:</p><div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem">'+
+    headers.map(h=>h?'<button onclick="document.getElementById(\''+ti+'\').value=\''+esc(h)+'\';setBadge(\'large\',\'found\',\'\u270E \u064A\u062F\u0648\u064A\');document.getElementById(\'checkHeadersHint\').style.display=\'none\';if(typeof checkLiveSendPlateColumn===\'function\')checkLiveSendPlateColumn();" style="padding:.3rem .7rem;background:var(--s2);border:1px solid var(--brd2);border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:.75rem;color:var(--text);transition:all .18s" onmouseover="this.style.borderColor=\'var(--violet)\';this.style.color=\'var(--violet)\'" onmouseout="this.style.borderColor=\'var(--brd2)\';this.style.color=\'var(--text)\'">'+esc(h)+'</button>':'').join('')+'</div>';
 }
 function togglePw(inputId,btn){const inp=document.getElementById(inputId);inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'\u{1F441}':'\u{1F648}';}
 function confirmLargePw(){
-  if(!checkLargeFile){showCheckStatus('err','يرجى رفع الملف الكبير أولاً');return;}
+  if(!checkLargeFile){showCheckStatus('err','\u064A\u0631\u062C\u0649 \u0631\u0641\u0639 \u0627\u0644\u0645\u0644\u0641 \u0623\u0648\u0644\u0627\u064B');return;}
   resetCheckDetect();
   detectColForSide('large');
 }
-function refreshCheckLoc(){
-  const btn=document.getElementById('checkLocBtn');btn.disabled=true;setCheckLocDot('','\u062C\u0627\u0631\u064A...');
-  if(!navigator.geolocation){setCheckLocDot('err','GPS \u063A\u064A\u0631 \u0645\u062F\u0639\u0648\u0645');btn.disabled=false;return;}
-  navigator.geolocation.getCurrentPosition(
-    pos=>{document.getElementById('gpsMyLat').value=pos.coords.latitude.toFixed(6);document.getElementById('gpsMyLon').value=pos.coords.longitude.toFixed(6);setCheckLocDot('on','\u2713 \u0645\u062D\u062F\u062F \xB1'+Math.round(pos.coords.accuracy)+'\u0645');btn.disabled=false;},
-    ()=>{setCheckLocDot('err','\u0641\u0634\u0644 GPS');btn.disabled=false;},
-    {enableHighAccuracy:true,timeout:12000,maximumAge:0}
-  );
+
+function checkLiveSetWsUi(connected,txt){
+  const d=document.getElementById('checkLiveDot');
+  const t=document.getElementById('checkLiveWsTxt');
+  if(d) d.className='dot'+(connected?' on':'');
+  if(t) t.textContent=txt||'';
 }
-function setCheckLocDot(state,txt){const d=document.getElementById('checkLocDot');d.className='dot'+(state==='on'?' on':state==='err'?' err':'');document.getElementById('checkLocTxt').textContent=txt;}
-async function runGpsNearestAfterMatch(){
-  const orsKey=getOrsKey().trim();
-  const myLat=document.getElementById('gpsMyLat').value.trim();
-  const myLon=document.getElementById('gpsMyLon').value.trim();
-  if(!orsKey||!myLat||!myLon){
-    showCheckStatus('ok','\u2705 \u062A\u0645\u062A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2014 \u0644\u0645 \u064A\u064F\u062D\u0633\u0628 \u0623\u0642\u0631\u0628 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A (\u0623\u0636\u0641 \u0645\u0641\u062A\u0627\u062D ORS \u0645\u0646 \u2699 \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0648\u062D\u062F\u062F \u0645\u0648\u0642\u0639\u0643).');
+function checkLiveUint8ToB64(u8){
+  const CH=0x8000; let s='';
+  for(let i=0;i<u8.length;i+=CH)
+    s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));
+  return btoa(s);
+}
+function checkLiveDownsample(f32,inRate,outRate){
+  if(inRate===outRate) return f32;
+  const ratio=inRate/outRate;
+  const n=Math.round(f32.length/ratio);
+  const o=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const a=Math.round(i*ratio), b=Math.min(Math.round((i+1)*ratio),f32.length);
+    let sum=0,c=0;
+    for(let j=a;j<b;j++){ sum+=f32[j]; c++; }
+    o[i]=c?sum/c:0;
+  }
+  return o;
+}
+function checkLiveFloatTo16(f32){
+  const b=new Int16Array(f32.length);
+  for(let i=0;i<f32.length;i++){
+    const s=Math.max(-1,Math.min(1,f32[i]));
+    b[i]=s<0?s*0x8000:s*0x7fff;
+  }
+  return b;
+}
+function checkLiveAppendResultRow(data){
+  const list=document.getElementById('checkLivePlateList');
+  if(!list) return;
+  const div=document.createElement('div');
+  div.className='live-plate-item ';
+  if(data.found===true) div.className+='hit';
+  else if(data.found===false) div.className+='miss';
+  else div.className+='unk';
+  let extra='';
+  if(data.sheet) extra=' \u00B7 '+String(data.sheet);
+  if(data.needs_plate_column) extra+=' \u00B7 \u0627\u062E\u062A\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629';
+  div.textContent=(data.plate||'\u2014')+extra;
+  list.insertBefore(div,list.firstChild);
+}
+function checkLiveClearPlates(){
+  const list=document.getElementById('checkLivePlateList');
+  if(list) list.innerHTML='';
+}
+function checkLiveOnMessage(ev){
+  let j;
+  try{ j=JSON.parse(ev.data);}catch(e){ return; }
+  const t=j.type;
+  if(t==='ready'){
+    checkLivePushWorkbook();
     return;
   }
-  document.getElementById('gpsProgress').style.display='';
-  document.getElementById('gpsProgFill').style.width='0%';
-  document.getElementById('gpsProgLbl').textContent='';
-  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0645\u0637\u0627\u0628\u0642\u0629 GPS (\u0623\u0642\u0631\u0628 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A) \u2026',true);
-  let vehicles=[];
-  try{
-    const fd=new FormData();fd.append('large_file',checkLargeFile);fd.append('small_file',checkSmallFile);
-    const pw=document.getElementById('largePw').value.trim();if(pw)fd.append('password',pw);
-    const lc=document.getElementById('largeCol').value.trim();if(lc)fd.append('large_col',lc);
-    const sc=document.getElementById('smallCol').value.trim();if(sc)fd.append('small_col',sc);
-    const res=await fetch('/api/check-gps-data',{method:'POST',body:fd});
-    const data=await res.json();
-    if(!res.ok){showCheckStatus('warn','\u2705 \u062A\u0645\u062A \u0645\u0637\u0627\u0628\u0642\u0629 Excel. GPS: '+String(data.detail||'\u062E\u0637\u0623'));_gpsReset();return;}
-    if(!data.vehicles||!data.vehicles.length){
-      showCheckStatus('ok','\u2705 \u062A\u0645\u062A \u0645\u0637\u0627\u0628\u0642\u0629 Excel. \u0644\u0627 \u062A\u0648\u062C\u062F \u0645\u0631\u0643\u0628\u0627\u062A \u0628\u0625\u062D\u062F\u0627\u062B\u064A\u0627\u062A \u0644\u0644\u0645\u0637\u0627\u0628\u0642\u0629.');
-      _gpsReset();
-      return;
+  if(t==='excel_loaded'){
+    checkLiveExcelReady=true;
+    const col=document.getElementById('largeCol').value.trim();
+    if(col && checkLiveWs && checkLiveWs.readyState===1)
+      checkLiveWs.send(JSON.stringify({type:'set_plate_column',column:col}));
+    showCheckStatus('ok','\u2714 \u062A\u0645 \u062A\u062D\u0645\u064A\u0644 Excel \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645');
+    return;
+  }
+  if(t==='plate_column_ready'){
+    showCheckStatus('ok','\u2714 \u0641\u0647\u0631\u0633 '+ (j.data.count||0) +' \u0644\u0648\u062D\u0629');
+    return;
+  }
+  if(t==='live_transcript'){
+    const el=document.getElementById('checkLiveTranscript');
+    if(el) el.textContent=j.data||'';
+    return;
+  }
+  if(t==='plate_result'){
+    checkLiveAppendResultRow(j.data||{});
+    const st=document.getElementById('chkManualState');
+    const d=j.data||{};
+    if(st){
+      if(d.found===true) st.textContent='\u2714 \u0645\u0648\u062C\u0648\u062F \u0641\u064A \u0627\u0644\u0645\u0644\u0641';
+      else if(d.found===false) st.textContent='\u2716 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F';
+      else if(d.needs_plate_column) st.textContent='\u0627\u062E\u062A\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629';
+      else if(!checkLargeFile) st.textContent='\u0627\u0631\u0641\u0639 Excel \u0623\u0648\u0644\u0627\u064B';
     }
-    vehicles=data.vehicles;
-    if(data.skipped>0)showCheckStatus('proc','\u062A\u0645 \u062A\u062E\u0637\u064A '+data.skipped+' \u0628\u062F\u0648\u0646 GPS \u2026',true);
+    return;
+  }
+  if(t==='error'){
+    const m=(j.data&&j.data.message)||'\u062E\u0637\u0623';
+    showCheckStatus('err',m);
+    return;
+  }
+  if(t==='turn_complete'){
+    return;
+  }
+}
+async function checkLivePushWorkbook(){
+  if(!checkLiveWs || checkLiveWs.readyState!==1) return;
+  if(!checkLargeFile){
+    showCheckStatus('warn','\u0644\u0627 \u064A\u0648\u062C\u062F \u0645\u0644\u0641 \u2014 \u0627\u0631\u0641\u0639 Excel \u0623\u0648\u0644\u0627\u064B');
+    return;
+  }
+  try{
+    const b64=await fileToB64(checkLargeFile);
+    const pw=document.getElementById('largePw').value.trim();
+    checkLiveWs.send(JSON.stringify({type:'excel_upload',data:b64,password:pw}));
   }catch(e){
-    showCheckStatus('warn','\u2705 \u062A\u0645\u062A \u0645\u0637\u0627\u0628\u0642\u0629 Excel. GPS: '+e.message);
-    _gpsReset();
-    return;
+    showCheckStatus('err','\u0641\u0634\u0644 \u0642\u0631\u0627\u0621\u0629 \u0627\u0644\u0645\u0644\u0641');
   }
-  const ORS='https://api.openrouteservice.org/v2/directions/driving-car';
-  const results=[],failed=[];let quotaExceeded=false;
-  for(let i=0;i<vehicles.length&&!quotaExceeded;i++){
-    const v=vehicles[i];
-    const pct=Math.round(((i+1)/vehicles.length)*100);
-    document.getElementById('gpsProgFill').style.width=pct+'%';
-    document.getElementById('gpsProgLbl').textContent=v.plate+' ('+(i+1)+'/'+vehicles.length+')';
-    showCheckStatus('proc','\u062C\u0627\u0631\u064A \u062D\u0633\u0627\u0628 \u0627\u0644\u0645\u0633\u0627\u0631\u0627\u062A... '+pct+'%',true);
-    const parts=v.gps.split(',');const vLat=parseFloat(parts[0].trim()),vLon=parseFloat(parts[1].trim());
-    if(isNaN(vLat)||isNaN(vLon)){failed.push({...v,reason:'\u0625\u062D\u062F\u0627\u062B\u064A\u0627\u062A \u063A\u064A\u0631 \u0635\u062D\u064A\u062D\u0629'});continue;}
-    if(Math.hypot(parseFloat(myLat)-vLat,parseFloat(myLon)-vLon)<0.0001){results.push({...v,distance_km:0,duration_min:0});continue;}
-    let routed=false;
-    for(let att=0;att<=2&&!routed;att++){
-      try{
-        const r=await fetch(ORS,{method:'POST',headers:{'Authorization':orsKey,'Content-Type':'application/json'},body:JSON.stringify({coordinates:[[parseFloat(myLon),parseFloat(myLat)],[vLon,vLat]],units:'km'})});
-        const rd=await r.json();
-        if(r.status===429){showCheckStatus('warn','\u2705 Excel \u062C\u0627\u0647\u0632. GPS: \u062A\u062C\u0627\u0648\u0632\u062A \u062D\u062F ORS');quotaExceeded=true;break;}
-        if(r.ok&&rd.routes?.length){const s=rd.routes[0].summary;results.push({...v,distance_km:+s.distance.toFixed(2),duration_min:+(s.duration/60).toFixed(1)});routed=true;}
-        else{if(att<2)await new Promise(r=>setTimeout(r,3000));else failed.push({...v,reason:rd?.error?.message||'\u0644\u0627 \u064A\u0648\u062C\u062F \u0645\u0633\u0627\u0631'});}
-      }catch(e2){if(att<2)await new Promise(r=>setTimeout(r,3000));else failed.push({...v,reason:e2.message});}
-    }
-    if(!quotaExceeded&&i<vehicles.length-1)await new Promise(r=>setTimeout(r,1200));
-  }
-  document.getElementById('gpsProgress').style.display='none';
-  if(!results.length){
-    showCheckStatus('warn','\u2705 Excel \u062C\u0627\u0647\u0632. \u0644\u0645 \u064A\u062A\u0645 \u062D\u0633\u0627\u0628 \u0645\u0633\u0627\u0631 GPS.');
-    _gpsReset();
-    return;
-  }
-  results.sort((a,b)=>a.duration_min-b.duration_min);results.forEach((r,i)=>r.rank=i+1);
-  const tbody=document.getElementById('gpsResultTableBody');
-  tbody.innerHTML='';
-  results.forEach((r,i)=>{
-    const gps=r.gps||'';
-    let mapsUrl='';
-    if(gps&&gps.includes(',')&&myLat&&myLon){
-      const parts=gps.split(',');
-      try{
-        const vLat=parseFloat(parts[0].trim()),vLng=parseFloat(parts[1].trim());
-        if(!isNaN(vLat)&&!isNaN(vLng))
-          mapsUrl='https://www.google.com/maps/dir/'+myLat+','+myLon+'/'+vLat+','+vLng;
-      }catch(e2){}
-    }
-    const mapCell=mapsUrl
-      ?'<a class="maps-link" href="'+mapsUrl+'" target="_blank" rel="noopener">&#x1F4CD; فتح الخريطة</a>'
-      :'—';
-    const isFirst=i===0;
-    const tr=document.createElement('tr');
-    if(isFirst)tr.style.background='rgba(34,197,94,.1)';
-    tr.innerHTML=
-      '<td class="td-num">'+r.rank+'</td>'+
-      '<td class="td-plate" style="'+(isFirst?'color:var(--green);font-weight:800':'')+'">'+esc(r.plate||'')+'</td>'+
-      '<td>'+mapCell+'</td>'+
-      '<td>'+esc(r.vehicle_type||'')+'</td>'+
-      '<td style="font-size:.78rem;color:var(--dim2)">'+esc(r.notes||'')+'</td>'+
-      '<td class="td-num" style="color:var(--sky)">'+r.distance_km+'</td>'+
-      '<td class="td-num" style="color:var(--sky)">'+r.duration_min+'</td>'+
-      '<td style="font-family:var(--mono);font-size:.75rem">'+esc(r.date||'')+'</td>';
-    tbody.appendChild(tr);
-  });
-  document.getElementById('gpsResultTableWrap').style.display='';
-  document.getElementById('gpsRSucc').textContent=results.length;
-  document.getElementById('gpsRFail').textContent=failed.length||'0';
-  document.getElementById('gpsRNearest').textContent=results[0].plate;
-  document.getElementById('gpsResultBox').classList.add('show');
-  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0625\u0646\u0634\u0627\u0621 Excel GPS \u2026',true);
-  try{
-    const fd2=new FormData();fd2.append('results_json',JSON.stringify(results));fd2.append('failed_json',JSON.stringify(failed));fd2.append('my_lat',myLat);fd2.append('my_lon',myLon);
-    const er=await fetch('/api/export-gps-excel',{method:'POST',body:fd2});
-    if(!er.ok){const e=await er.json().catch(()=>({detail:er.statusText}));throw new Error(e.detail);}
-    gpsResultBlob=await er.blob();
-    showCheckStatus('ok','\u2705 \u062A\u0645\u062A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u0648 GPS: '+results.length+' \u0645\u0631\u0643\u0628\u0629'+(failed.length?' \u2014 '+failed.length+' \u0641\u0634\u0644\u062A':''));
-  }catch(e){showCheckStatus('warn','\u2705 Excel \u0627\u0644\u062A\u0637\u0627\u0628\u0642 \u062C\u0627\u0647\u0632. \u062E\u0637\u0623 GPS: '+e.message);}
 }
-function _gpsReset(){document.getElementById('gpsProgress').style.display='none';}
-function downloadGpsResult(){if(!gpsResultBlob)return;const ts=new Date().toISOString().slice(0,16).replace('T','_').replace(':','-');triggerDownload(gpsResultBlob,'\u0623\u0642\u0631\u0628_\u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A_'+ts+'.xlsx');}
+function checkLiveSendPlateColumn(){
+  if(!checkLiveWs || checkLiveWs.readyState!==1 || !checkLiveExcelReady) return;
+  const col=document.getElementById('largeCol').value.trim();
+  if(!col) return;
+  checkLiveWs.send(JSON.stringify({type:'set_plate_column',column:col}));
+}
+function checkLiveStopMicOnly(){
+  checkLiveMicOn=false;
+  if(checkLiveSilenceTimer){
+    clearTimeout(checkLiveSilenceTimer);
+    checkLiveSilenceTimer=null;
+  }
+  const btn=document.getElementById('checkLiveToggleBtn');
+  if(btn) btn.textContent='\u{1F399} \u0627\u0628\u062F\u0623 \u0627\u0644\u0627\u0633\u062A\u0645\u0627\u0639';
+  try{
+    if(checkLiveScriptNode){
+      checkLiveScriptNode.disconnect();
+      checkLiveScriptNode=null;
+    }
+    if(checkLiveMediaStream){
+      checkLiveMediaStream.getTracks().forEach(tr=>tr.stop());
+      checkLiveMediaStream=null;
+    }
+    if(checkLiveAudioCtx){
+      checkLiveAudioCtx.close();
+      checkLiveAudioCtx=null;
+    }
+  }catch(e){}
+  if(checkLiveWs && checkLiveWs.readyState===1)
+    checkLiveWs.send(JSON.stringify({type:'end_of_turn'}));
+}
+function checkLiveStopAll(){
+  checkLiveStopMicOnly();
+  checkLiveExcelReady=false;
+  try{
+    if(checkLiveWs){ checkLiveWs.close(); checkLiveWs=null; }
+  }catch(e){}
+  checkLiveSetWsUi(false,'\u063A\u064A\u0631 \u0645\u062A\u0635\u0644');
+}
+async function checkLiveEnsureSocket(){
+  const tok=localStorage.getItem('access_token')||'';
+  if(!tok){ showCheckStatus('err','\u0633\u062C\u0651\u0644 \u0627\u0644\u062F\u062E\u0648\u0644 \u0623\u0648\u0644\u0627\u064B'); return false; }
+  const apiKey=getApiKey().trim();
+  if(!apiKey){ showCheckStatus('err','\u0623\u0636\u0641 \u0645\u0641\u062A\u0627\u062D Gemini \u0641\u064A \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A'); return false; }
+  if(checkLiveWs && checkLiveWs.readyState===1) return true;
+  if(checkLiveWs){
+    try{ checkLiveWs.close(); }catch(e){}
+    checkLiveWs=null;
+  }
+  return new Promise(function(resolve){
+    let settled=false;
+    const t=setTimeout(function(){
+      if(!settled){ settled=true; showCheckStatus('err','\u0627\u0646\u062A\u0647\u062A \u0645\u0647\u0644\u0629 \u0627\u0644\u0627\u062A\u0635\u0627\u0644'); resolve(false); }
+    },25000);
+    function done(v){
+      if(!settled){ settled=true; clearTimeout(t); resolve(v); }
+    }
+    const wsUrl=new URL('/ws/check-live',window.location.href);
+    wsUrl.searchParams.set('token',tok);
+    wsUrl.protocol=location.protocol==='https:'?'wss:':'ws:';
+    const ws=new WebSocket(wsUrl.toString());
+    checkLiveWs=ws;
+    ws.onopen=function(){ ws.send(JSON.stringify({type:'init',api_key:apiKey})); };
+    ws.onerror=function(){
+      showCheckStatus('err','\u062A\u0639\u0630\u0631 \u0627\u062A\u0635\u0627\u0644 WebSocket');
+      checkLiveSetWsUi(false,'\u062E\u0637\u0623');
+      done(false);
+    };
+    ws.onclose=function(){
+      checkLiveSetWsUi(false,'\u0627\u0646\u0642\u0637\u0627\u0639');
+      if(checkLiveMicOn) checkLiveStopMicOnly();
+    };
+    ws.onmessage=function(ev){
+      checkLiveOnMessage(ev);
+      try{
+        const j=JSON.parse(ev.data);
+        if(j.type==='ready'){
+          checkLiveSetWsUi(true,'\u062C\u0627\u0647\u0632 \u2014 \u0627\u0633\u062A\u0645\u0639');
+          done(true);
+        }
+      }catch(e){}
+    };
+  });
+}
+async function checkLiveToggleMic(){
+  if(checkLiveMicOn){
+    checkLiveStopMicOnly();
+    return;
+  }
+  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u2026',true);
+  const ok=await checkLiveEnsureSocket();
+  if(!ok){
+    showCheckStatus('err','\u0644\u0645 \u064A\u062A\u0645 \u0627\u0644\u0627\u062A\u0635\u0627\u0644');
+    return;
+  }
+  if(!checkLargeFile){
+    showCheckStatus('warn','\u0627\u0631\u0641\u0639 \u0645\u0644\u0641 Excel \u0644\u0644\u0645\u0637\u0627\u0628\u0642\u0629');
+  }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    checkLiveMediaStream=stream;
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    checkLiveAudioCtx=ctx;
+    const src=ctx.createMediaStreamSource(stream);
+    const bufferSize=4096;
+    const node=ctx.createScriptProcessor(bufferSize,1,1);
+    checkLiveScriptNode=node;
+    node.onaudioprocess=function(e){
+      if(!checkLiveMicOn || !checkLiveWs || checkLiveWs.readyState!==1) return;
+      const input=e.inputBuffer.getChannelData(0);
+      let sum=0;
+      for(let i=0;i<input.length;i++) sum += input[i]*input[i];
+      const rms=Math.sqrt(sum/input.length);
+      const down=checkLiveDownsample(input,ctx.sampleRate,16000);
+      const pcm=checkLiveFloatTo16(down);
+      const u8=new Uint8Array(pcm.buffer);
+      const b64=checkLiveUint8ToB64(u8);
+      try{ checkLiveWs.send(JSON.stringify({type:'audio',data:b64})); }catch(err){}
+      if(rms>CHECK_LIVE_VOICE_RMS_THRESHOLD){
+        checkLiveLastVoiceAt=Date.now();
+        if(checkLiveSilenceTimer){
+          clearTimeout(checkLiveSilenceTimer);
+          checkLiveSilenceTimer=null;
+        }
+      }else if(!checkLiveSilenceTimer){
+        checkLiveSilenceTimer=setTimeout(function(){
+          checkLiveSilenceTimer=null;
+          if(!checkLiveMicOn || !checkLiveWs || checkLiveWs.readyState!==1) return;
+          if(Date.now()-checkLiveLastVoiceAt >= CHECK_LIVE_SILENCE_MS){
+            try{ checkLiveWs.send(JSON.stringify({type:'end_of_turn'})); }catch(_){}
+          }
+        },CHECK_LIVE_SILENCE_MS);
+      }
+    };
+    const mute=ctx.createGain();
+    mute.gain.value=0;
+    src.connect(node);
+    node.connect(mute);
+    mute.connect(ctx.destination);
+    checkLiveMicOn=true;
+    checkLiveLastVoiceAt=Date.now();
+    document.getElementById('checkLiveToggleBtn').textContent='\u23F9 \u0625\u064A\u0642\u0627\u0641 \u0627\u0644\u0627\u0633\u062A\u0645\u0627\u0639';
+    showCheckStatus('ok','\u062C\u0627\u0631\u064A \u0627\u0644\u0627\u0633\u062A\u0645\u0627\u0639 \u2026');
+  }catch(e){
+    showCheckStatus('err','\u0627\u0644\u0645\u064A\u0643\u0631\u0648\u0641\u0648\u0646: '+e.message);
+    checkLiveMicOn=false;
+  }
+}
+function checkLiveManualLookup(){
+  const plate=document.getElementById('chkManualPlate').value.trim();
+  const st=document.getElementById('chkManualState');
+  if(!plate){ if(st) st.textContent='\u0627\u0643\u062A\u0628 \u0644\u0648\u062D\u0629'; return; }
+  if(!checkLiveWs || checkLiveWs.readyState!==1){
+    if(st) st.textContent='\u0627\u0628\u062F\u0623 \u0627\u0644\u0627\u0633\u062A\u0645\u0627\u0639 \u0623\u0648 \u0627\u0646\u062A\u0638\u0631 \u0627\u0644\u0627\u062A\u0635\u0627\u0644';
+    return;
+  }
+  checkLiveWs.send(JSON.stringify({type:'manual_lookup',plate:plate}));
+  if(st) st.textContent='\u062A\u0645 \u0627\u0644\u0637\u0644\u0628';
+}
 
 // ── Field check — GPS mode ─────────────────────────────
 function fcSetMode(m){
@@ -3204,6 +3041,7 @@ function saveFcData(){
   }catch(e){}
 }
 function loadFcData(){
+  if(!document.getElementById('fcExtractedSection')) return;
   try{
     const al=localStorage.getItem('fcAllRows_v5');
     const ex=localStorage.getItem('fcExtractedRows_v5');
@@ -3231,7 +3069,7 @@ function loadFcData(){
 // ── Status helpers ────────────────────────────────────
 function showStatus(type,txt,spin=false){const bar=document.getElementById('statusBar');bar.className='status '+(type==='proc'?'proc':type==='ok'?'ok':'err');document.getElementById('spin').style.display=spin?'block':'none';document.getElementById('statusTxt').textContent=txt;if(type!=='proc')setTimeout(()=>{bar.className='status';},7000);}
 function showCheckStatus(type,txt,spin=false){const bar=document.getElementById('checkStatus');bar.className='status '+(type==='proc'?'proc':type==='ok'?'ok':type==='warn'?'warn':'err');document.getElementById('checkSpin').style.display=spin?'block':'none';document.getElementById('checkStatusTxt').textContent=txt;if(type!=='proc')setTimeout(()=>{bar.className='status';},9000);}
-function fcShowStatus(type,txt,spin=false){const bar=document.getElementById('fcStatusBar');bar.className='status '+(type==='proc'?'proc':type==='ok'?'ok':type==='warn'?'warn':'err');document.getElementById('fcSpin').style.display=spin?'block':'none';document.getElementById('fcStatusTxt').textContent=txt;if(type!=='proc')setTimeout(()=>{bar.className='status';},9000);}
+function fcShowStatus(type,txt,spin=false){const bar=document.getElementById('fcStatusBar');if(!bar)return;const sp=document.getElementById('fcSpin'),tx=document.getElementById('fcStatusTxt');if(!sp||!tx)return;bar.className='status '+(type==='proc'?'proc':type==='ok'?'ok':type==='warn'?'warn':'err');sp.style.display=spin?'block':'none';tx.textContent=txt;if(type!=='proc')setTimeout(()=>{bar.className='status';},9000);}
 // ── Utils ─────────────────────────────────────────────
 function triggerDownload(blob,filename){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}

@@ -16,6 +16,7 @@ from models import User
 from routers.audio import router as audio_router
 from routers.excel import router as excel_router
 from routers.check import router as check_router
+from routers.check_live_ws import router as check_live_ws_router
 from routers.gps import router as gps_router
 from routers.admin import router as admin_router
 from routers.auth import router as auth_router
@@ -134,6 +135,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.include_router(audio_router)
 app.include_router(excel_router)
 app.include_router(check_router)
+app.include_router(check_live_ws_router)
 app.include_router(gps_router)
 
 app.include_router(auth_router)

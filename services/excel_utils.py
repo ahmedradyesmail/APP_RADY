@@ -105,10 +105,13 @@ def apply_excel_style(
 def apply_excel_style_matched_merge(
     ws: openpyxl.worksheet.worksheet.Worksheet,
     headers: list[str],
-    rows_of_dicts: list[dict],
+    rows_of_values: list[list],
     col_source: list[str],
 ) -> None:
-    """RTL sheet: colored header bands; body text black for readability."""
+    """RTL sheet: colored header bands; body text black for readability.
+
+    Rows are lists aligned by column index (supports duplicate display titles).
+    """
     ws.sheet_view.rightToLeft = True
 
     ha = Alignment(horizontal="center", vertical="center")
@@ -131,10 +134,11 @@ def apply_excel_style_matched_merge(
     fill_large = PatternFill("solid", start_color="DBEAFE")
     fill_small = PatternFill("solid", start_color="DCFCE7")
 
-    for ri, rd in enumerate(rows_of_dicts, 1):
-        for ci, h in enumerate(headers, 1):
+    for ri, row_vals in enumerate(rows_of_values, 1):
+        for ci, _h in enumerate(headers, 1):
             src = col_source[ci - 1] if ci - 1 < len(col_source) else "large"
-            cell = ws.cell(row=ri + 1, column=ci, value=rd.get(h, ""))
+            raw = row_vals[ci - 1] if ci - 1 < len(row_vals) else ""
+            cell = ws.cell(row=ri + 1, column=ci, value=raw)
             cell.border = brd
             cell.alignment = ca
             cell.font = body_font
