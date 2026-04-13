@@ -282,6 +282,14 @@ async function loadOmPersistedCheckFiles(){
     const rb=document.getElementById('omRemoveLargeBtn');
     if(rb) rb.classList.add('show');
     await omDetectColForSide('large');
+    // If large file is restored from localStorage, upload it to Postgres automatically
+    // when server-side storage is available so user doesn't get stuck on local-only state.
+    if(omPostgresLargeEnabled && !omUseStoredLarge && !omImportLargeBusy){
+      var pw=document.getElementById('omLargePw').value.trim();
+      if(!(omLargeNeedsPassword && !pw)){
+        omImportLargeToServer();
+      }
+    }
     omCheckRunReady();
   }catch(e){}
 }
