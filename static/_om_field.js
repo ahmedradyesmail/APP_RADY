@@ -8,6 +8,7 @@ let omTempCheckSessionToken='';
 let omTempCheckPingTimer=null;
 let omTempLargeFingerprint='';
 let omTempLargeReady=false;
+let omHasStoredImports=false;
 
 function omGetSmallPlatesTextLines(){
   var ta=document.getElementById('omSmallPlatesText');
@@ -66,8 +67,17 @@ async function omRenderStoredImportsList(){
     }
     var arr=j.imports||[];
     if(!arr.length){
+      omHasStoredImports=false;
       el.innerHTML='<span style="color:var(--dim2)">\u2014 \u0644\u0627 \u062A\u0648\u062C\u062F \u0627\u0633\u062A\u064A\u0631\u0627\u062F\u0627\u062A \u0645\u062E\u0632\u0651\u0646\u0629 \u0628\u0639\u062F</span>';
       return;
+    }
+    omHasStoredImports=true;
+    if(!omCheckLargeFile){
+      var cb=document.getElementById('omUseStoredLargeCb');
+      if(cb && !cb.checked){
+        cb.checked=true;
+        omOnToggleStoredLarge();
+      }
     }
     var totalRows=arr.reduce(function(sum,it){ return sum+Number(it.row_count||0); },0);
     el.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.45rem">'+
@@ -81,6 +91,7 @@ async function omRenderStoredImportsList(){
         '<button type="button" class="tb-btn outline" style="padding:.2rem .55rem;font-size:.72rem" onclick="omDeleteStoredImport('+Number(it.id)+')">\u062D\u0630\u0641</button></div>';
     }).join('');
   }catch(_e){
+    omHasStoredImports=false;
     el.innerHTML='';
   }
 }
@@ -563,7 +574,7 @@ function omShowHeadersHint(side,headers){
 function omCheckRunReady(){
   var hasSmall=!!omCheckSmallFile || omUsingSmallText();
   var hasLarge=!!omCheckLargeFile;
-  var ok=hasSmall && (hasLarge || (omPostgresLargeEnabled && omUseStoredLarge));
+  var ok=hasSmall && (hasLarge || (omPostgresLargeEnabled && omUseStoredLarge && omHasStoredImports));
   document.getElementById('omMatchBtn').disabled=!ok;
 }
 async function omRunMatch(){
