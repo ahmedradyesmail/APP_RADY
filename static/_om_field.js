@@ -159,6 +159,11 @@ async function omImportLargeToServer(){
     if(!r.ok) throw new Error(j.detail||r.statusText||'\u0641\u0634\u0644 \u0627\u0644\u0627\u0633\u062A\u064A\u0631\u0627\u062F');
     if(hi) hi.textContent='\u2714 \u0627\u0633\u062A\u064A\u0631\u0627\u062F #'+String(j.import_id||'')+': '+String(j.row_count||0)+' \u0635\u0641\u060C \u0639\u0645\u0648\u062F '+String(j.large_col_used||'')+' \u2014 '+String(j.sheet_name||'');
     omShowFieldStatus('ok','\u2705 \u062A\u0645 \u062D\u0641\u0638 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0643\u0628\u064A\u0631 \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645');
+    var cb=document.getElementById('omUseStoredLargeCb');
+    if(cb && !cb.checked){
+      cb.checked=true;
+      omOnToggleStoredLarge();
+    }
     await omRenderStoredImportsList();
     if(omUseStoredLarge) await omDetectColForSide('large');
   }catch(e){ omShowFieldStatus('err','\u062E\u0637\u0623: '+(e.message||'')); }
