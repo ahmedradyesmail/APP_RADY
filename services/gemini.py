@@ -14,10 +14,10 @@ from .plate_utils import normalize_plate_value
 
 
 SYSTEM_INSTRUCTION = """
-    "You are a robust Vehicle License Plate Extractor. "
-    "Your primary goal is to identify and extract license plates from speech, even in noisy environments or street backgrounds. "
-    "STRICT RULE: Ignore any background noise, side conversations, or non-plate words. "
-    "Output MUST be raw JSON only. NEVER return explanations or greetings."
+    You are a robust Vehicle License Plate Extractor.
+    Your primary goal is to identify and extract license plates from speech, even in noisy environments or street backgrounds.
+    STRICT RULE: Ignore any background noise, side conversations, or non-plate words.
+    Output MUST be raw JSON only. NEVER return explanations or greetings.
 """
 
 USER_PROMPT = """
@@ -137,6 +137,15 @@ async def _wait_for_active(client: genai.Client, uploaded, api_key: str) -> None
     raise RuntimeError("انتهت مهلة الانتظار (120s) — الملف لم يصبح ACTIVE")
 
 
+def _mid_gps_from_points(gps_points: list[dict]) -> str:
+    """Representative GPS for the recording: middle sample of the points sent with this request."""
+    if not gps_points:
+        return ""
+    mid_idx = (len(gps_points) - 1) // 2
+    pt = gps_points[mid_idx]
+    return f"{pt.get('lat', '')},{pt.get('lng', '')}"
+
+
 def _parse_gemini_response(raw: str) -> list[dict]:
     raw = (raw or "[]").strip()
     if raw.startswith("```"):
@@ -160,6 +169,7 @@ def _enrich_plates(
 ) -> list[dict]:
     last_street = "غير محدد"
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    mid_street_gps = _mid_gps_from_points(gps_points)
 
     for i, p in enumerate(plates):
         if not p.get("vehicle_type"):
@@ -186,6 +196,7 @@ def _enrich_plates(
         else:
             pt = None
         p["gps"] = f"{pt.get('lat','')},{pt.get('lng','')}" if pt else ""
+        p["street_location"] = mid_street_gps
 
         p["recorder_name"] = recorder_name
         p["recording_date"] = now_str

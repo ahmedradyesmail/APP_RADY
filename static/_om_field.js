@@ -1,6 +1,211 @@
 // ── التشيك (قديم الفرز): ملفان + Match + GPS
 let omCheckLargeFile=null,omCheckSmallFile=null,omCheckResultBlob=null;
 let omCheckDetected={large:null,small:null},omCheckLargeHasGps=false,omGpsResultBlob=null;
+let omPostgresLargeEnabled=false,omUseStoredLarge=false;
+let omImportLargeBusy=false;
+let omLargeNeedsPassword=false;
+let omTempCheckSessionToken='';
+let omTempCheckPingTimer=null;
+let omTempLargeFingerprint='';
+let omTempLargeReady=false;
+
+function omGetSmallPlatesTextLines(){
+  var ta=document.getElementById('omSmallPlatesText');
+  if(!ta) return [];
+  return String(ta.value||'').split(/\r?\n/).map(function(x){ return x.trim().replace(/\s+/g,' '); }).filter(Boolean);
+}
+function omUsingSmallText(){
+  return omGetSmallPlatesTextLines().length>0;
+}
+function omIsPasswordRelatedError(msg){
+  var t=String(msg||'');
+  return t.indexOf('فك تشفير')!==-1 || t.indexOf('كلمة المرور')!==-1 || t.toLowerCase().indexOf('password')!==-1;
+}
+function omLargeFingerprint(file){
+  if(!file) return '';
+  return [String(file.name||''),String(file.size||0),String(file.lastModified||0)].join('|');
+}
+async function omEnsureTempCheckSession(){
+  if(!omPostgresLargeEnabled) return '';
+  if(omTempCheckSessionToken) return omTempCheckSessionToken;
+  var r=await fetch('/api/check/temp/session/start',{method:'POST'});
+  var j=await r.json().catch(function(){return{};});
+  if(!r.ok) throw new Error(j.detail||r.statusText||'فشل بدء جلسة التشيك');
+  omTempCheckSessionToken=String(j.session_token||'');
+  try{ localStorage.setItem('omTempCheckSessionToken',omTempCheckSessionToken); }catch(_){}
+  if(omTempCheckPingTimer) clearInterval(omTempCheckPingTimer);
+  omTempCheckPingTimer=setInterval(async function(){
+    if(!omTempCheckSessionToken) return;
+    const fd=new FormData();
+    fd.append('session_token',omTempCheckSessionToken);
+    try{ await fetch('/api/check/temp/session/ping',{method:'POST',body:fd}); }catch(_){}
+  },60000);
+  return omTempCheckSessionToken;
+}
+function omOnSmallTextInput(){
+  var lines=omGetSmallPlatesTextLines();
+  if(lines.length){
+    omSetBadge('small','found','✔ نصي ('+String(lines.length)+' لوحة)');
+    omRebuildCheckExportChoices('small',['رقم اللوحة'],true);
+    if(!document.getElementById('omSmallCol').value.trim()) document.getElementById('omSmallCol').value='رقم اللوحة';
+  }else if(!omCheckSmallFile){
+    omSetBadge('small','pending','—');
+  }
+  omCheckRunReady();
+}
+
+async function omRenderStoredImportsList(){
+  var el=document.getElementById('omStoredImportsList');
+  if(!el||!omPostgresLargeEnabled) return;
+  try{
+    var r=await fetch('/api/check/stored-imports');
+    var j=await r.json().catch(function(){return{};});
+    if(!r.ok){
+      el.innerHTML='<span style="color:var(--dim2)">\u26A0 \u0644\u0627 \u064A\u0645\u0643\u0646 \u062A\u062D\u0645\u064A\u0644 \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0627\u0633\u062A\u064A\u0631\u0627\u062F\u0627\u062A</span>';
+      return;
+    }
+    var arr=j.imports||[];
+    if(!arr.length){
+      el.innerHTML='<span style="color:var(--dim2)">\u2014 \u0644\u0627 \u062A\u0648\u062C\u062F \u0627\u0633\u062A\u064A\u0631\u0627\u062F\u0627\u062A \u0645\u062E\u0632\u0651\u0646\u0629 \u0628\u0639\u062F</span>';
+      return;
+    }
+    var totalRows=arr.reduce(function(sum,it){ return sum+Number(it.row_count||0); },0);
+    el.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.45rem">'+
+      '<span style="padding:.2rem .5rem;border:1px solid var(--brd2);border-radius:999px;background:var(--s2);font-family:var(--mono)">\uD83D\uDCC1 \u0627\u0644\u0645\u0644\u0641\u0627\u062A: '+String(arr.length)+'</span>'+
+      '<span style="padding:.2rem .5rem;border:1px solid var(--brd2);border-radius:999px;background:var(--s2);font-family:var(--mono)">\uD83E\uDDEE \u0627\u0644\u0635\u0641\u0648\u0641: '+String(totalRows)+'</span>'+
+      '</div>'+
+      '<div style="font-weight:600;margin-bottom:.35rem;color:var(--dim)">\u0627\u0644\u0645\u0644\u0641\u0627\u062A \u0627\u0644\u0645\u062E\u0632\u0651\u0646\u0629</div>'+arr.map(function(it){
+      var nm=(it.filename||'').replace(/</g,'&lt;');
+      return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;margin:.3rem 0;padding:.35rem .5rem;background:var(--s2);border:1px solid var(--brd2);border-radius:8px">'+
+        '<span style="flex:1;min-width:8rem;font-family:var(--mono);font-size:.72rem">'+nm+' <span style="color:var(--dim2)">('+String(it.row_count||0)+' \u0635\u0641)</span></span>'+
+        '<button type="button" class="tb-btn outline" style="padding:.2rem .55rem;font-size:.72rem" onclick="omDeleteStoredImport('+Number(it.id)+')">\u062D\u0630\u0641</button></div>';
+    }).join('');
+  }catch(_e){
+    el.innerHTML='';
+  }
+}
+async function omDeleteStoredImport(id){
+  if(!id||!confirm('\u062D\u0630\u0641 \u0647\u0630\u0627 \u0627\u0644\u0627\u0633\u062A\u064A\u0631\u0627\u062F \u0645\u0646 \u0627\u0644\u062E\u0627\u062F\u0645\u061F')) return;
+  try{
+    var r=await fetch('/api/check/stored-imports/'+encodeURIComponent(String(id)),{method:'DELETE'});
+    var j=await r.json().catch(function(){return{};});
+    if(!r.ok) throw new Error(j.detail||r.statusText||'\u0641\u0634\u0644');
+    omShowFieldStatus('ok','\u2705 \u062A\u0645 \u0627\u0644\u062D\u0630\u0641');
+    await omRenderStoredImportsList();
+    if(omUseStoredLarge) await omDetectColForSide('large');
+  }catch(e){ omShowFieldStatus('err','\u062E\u0637\u0623: '+(e.message||'')); }
+}
+
+async function omFetchCheckCapabilities(){
+  try{
+    const r=await fetch('/api/check/capabilities');
+    if(!r.ok){ omPostgresLargeEnabled=false; return; }
+    const j=await r.json();
+    omPostgresLargeEnabled=!!j.postgres_large_enabled;
+    const panel=document.getElementById('omPgStoragePanel');
+    if(panel) panel.style.display=omPostgresLargeEnabled?'':'none';
+    if(!omPostgresLargeEnabled){ omUseStoredLarge=false; var cb=document.getElementById('omUseStoredLargeCb'); if(cb) cb.checked=false; }
+    else{ omRenderStoredImportsList(); }
+  }catch(_e){ omPostgresLargeEnabled=false; }
+}
+
+function omOnToggleStoredLarge(){
+  var c=document.getElementById('omUseStoredLargeCb');
+  omUseStoredLarge=!!(c&&c.checked);
+  if(omUseStoredLarge){
+    omClearPersistedCheckFile('large');
+    omCheckLargeFile=null;
+    var fn=document.getElementById('omLargeFname'); if(fn) fn.textContent='';
+    var rb=document.getElementById('omRemoveLargeBtn'); if(rb) rb.classList.remove('show');
+    var fi=document.getElementById('omLargeFileIn'); if(fi) fi.value='';
+    var lp=document.getElementById('omLargePw'); if(lp) lp.value='';
+    omResetColDropdown('large');
+    omSetBadge('large','pending','\u2014');
+    omClearCheckExportList('large');
+  }
+  omResetCheckDetect();
+  omDetectColForSide('large');
+  if(omUseStoredLarge) omRenderStoredImportsList();
+  omCheckRunReady();
+}
+
+async function omImportLargeToServer(){
+  if(!omCheckLargeFile){ omShowFieldStatus('err','\u0627\u0631\u0641\u0639 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0643\u0628\u064A\u0631 \u062B\u0645 \u0627\u0636\u063A\u0637 \u0627\u0633\u062A\u064A\u0631\u0627\u062F \u0625\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645'); return; }
+  if(omImportLargeBusy) return;
+  omImportLargeBusy=true;
+  var importBtn=document.getElementById('omImportLargeBtn');
+  if(importBtn) importBtn.disabled=true;
+  var hi=document.getElementById('omPgImportHint');
+  if(hi) hi.textContent='';
+  omShowFieldStatus('proc','\u062C\u0627\u0631\u064A \u0627\u0633\u062A\u064A\u0631\u0627\u062F \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0643\u0628\u064A\u0631 \u2026',true);
+  try{
+    var fd=new FormData();
+    fd.append('large_file',omCheckLargeFile);
+    var pw=document.getElementById('omLargePw').value.trim(); if(pw) fd.append('password',pw);
+    var lc=document.getElementById('omLargeCol').value.trim(); if(lc) fd.append('large_col',lc);
+    var r=await fetch('/api/check/import-large',{method:'POST',body:fd});
+    var j=await r.json().catch(function(){return{};});
+    if(!r.ok) throw new Error(j.detail||r.statusText||'\u0641\u0634\u0644 \u0627\u0644\u0627\u0633\u062A\u064A\u0631\u0627\u062F');
+    if(hi) hi.textContent='\u2714 \u0627\u0633\u062A\u064A\u0631\u0627\u062F #'+String(j.import_id||'')+': '+String(j.row_count||0)+' \u0635\u0641\u060C \u0639\u0645\u0648\u062F '+String(j.large_col_used||'')+' \u2014 '+String(j.sheet_name||'');
+    omShowFieldStatus('ok','\u2705 \u062A\u0645 \u062D\u0641\u0638 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0643\u0628\u064A\u0631 \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645');
+    await omRenderStoredImportsList();
+    if(omUseStoredLarge) await omDetectColForSide('large');
+  }catch(e){ omShowFieldStatus('err','\u062E\u0637\u0623: '+(e.message||'')); }
+  finally{
+    omImportLargeBusy=false;
+    if(importBtn) importBtn.disabled=false;
+  }
+}
+async function omUploadLargeToTempIfNeeded(){
+  if(!omPostgresLargeEnabled) throw new Error('تخزين التشيك غير متاح');
+  if(!omCheckLargeFile) throw new Error('ارفع الملف الكبير أولاً');
+  const fp=omLargeFingerprint(omCheckLargeFile);
+  if(omTempLargeReady && fp && fp===omTempLargeFingerprint) return;
+  const token=await omEnsureTempCheckSession();
+  const fd=new FormData();
+  fd.append('session_token',token);
+  fd.append('large_file',omCheckLargeFile);
+  const pw=document.getElementById('omLargePw').value.trim(); if(pw) fd.append('password',pw);
+  const lc=document.getElementById('omLargeCol').value.trim(); if(lc) fd.append('large_col',lc);
+  const r=await fetch('/api/check/temp/upload-large',{method:'POST',body:fd});
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok) throw new Error(j.detail||r.statusText||'فشل رفع الملف الكبير المؤقت');
+  omTempLargeReady=true;
+  omTempLargeFingerprint=fp;
+  omShowFieldStatus('ok','✅ تم تجهيز '+String(j.stored_count||0)+' لوحة للتشيك السريع');
+}
+async function omRunTempTextCheck(){
+  const txt=(document.getElementById('omSmallPlatesText').value||'').trim();
+  if(!txt) throw new Error('أدخل اللوحات النصية أولاً');
+  await omUploadLargeToTempIfNeeded();
+  const token=await omEnsureTempCheckSession();
+  const fd=new FormData();
+  fd.append('session_token',token);
+  fd.append('plates_text',txt);
+  const r=await fetch('/api/check/temp/query',{method:'POST',body:fd});
+  const j=await r.json().catch(function(){return{};});
+  if(!r.ok) throw new Error(j.detail||r.statusText||'فشل فحص اللوحات');
+  const rows=(j.rows||[]).map(function(it){ return [String(it.plate||''), it.exists?'موجودة':'غير موجودة']; });
+  const found=Number(j.found||0), total=Number(j.total||rows.length), miss=Number(j.not_found||Math.max(0,total-found));
+  document.getElementById('omRMatched').textContent=String(found);
+  document.getElementById('omRPlates').textContent=String(total);
+  document.getElementById('omRUnmatched').textContent=String(miss);
+  document.getElementById('omRLargeCol').textContent='تشيك مؤقت (لوحات فقط)';
+  document.getElementById('omRSmallCol').textContent=document.getElementById('omSmallCol').value.trim()||'رقم اللوحة';
+  document.getElementById('omDlBtn').style.display='none';
+  document.getElementById('omResultBox').classList.add('show');
+  omRenderCheckMatchPreview({headers:['اللوحة','الحالة'],col_sources:['small','small'],rows:rows,total_rows:rows.length,truncated:false});
+  omShowFieldStatus('ok','✅ تم فحص '+String(total)+' لوحة (موجود: '+String(found)+')');
+}
+
+document.addEventListener('DOMContentLoaded',async function(){
+  omFetchCheckCapabilities();
+  try{
+    var tok=localStorage.getItem('omTempCheckSessionToken')||'';
+    if(tok) omTempCheckSessionToken=tok;
+  }catch(_){}
+  try{ await omEnsureTempCheckSession(); }catch(_){}
+});
 function omColId(side){ return side==='large'?'omLargeCol':'omSmallCol'; }
 function omColBadgeId(side){ return side==='large'?'omLargeColBadge':'omSmallColBadge'; }
 function omShowFieldStatus(type,txt,spin=false){
@@ -54,9 +259,12 @@ async function loadOmPersistedCheckFiles(){
     omCheckRunReady();
   }catch(e){}
 }
-function omOnCheckFileChange(file,side){
+async function omOnCheckFileChange(file,side){
   if(!file)return;
   if(side==='large'){
+    omLargeNeedsPassword=false;
+    omTempLargeReady=false;
+    omTempLargeFingerprint='';
     omCheckLargeFile=file;
     document.getElementById('omLargeFname').textContent='📎 '+file.name;
     document.getElementById('omRemoveLargeBtn').classList.add('show');
@@ -65,10 +273,19 @@ function omOnCheckFileChange(file,side){
     document.getElementById('omResultBox').classList.remove('show');
     if(typeof omRenderCheckMatchPreview==='function') omRenderCheckMatchPreview(null);
     document.getElementById('omFieldHeadersHint').style.display='none';
-    omDetectColForSide('large');
+    await omDetectColForSide('large');
     omPersistCheckFile('large',file);
+    if(omPostgresLargeEnabled){
+      var pw0=document.getElementById('omLargePw').value.trim();
+      if(omLargeNeedsPassword && !pw0){
+        omShowFieldStatus('warn','الملف الكبير مشفّر. أدخل كلمة المرور ثم اضغط «تأكيد» ليتم الاستيراد.');
+      }else{
+        omImportLargeToServer();
+      }
+    }
   } else {
     omCheckSmallFile=file;
+    var ta=document.getElementById('omSmallPlatesText'); if(ta) ta.value='';
     document.getElementById('omSmallFname').textContent='📎 '+file.name;
     document.getElementById('omRemoveSmallBtn').classList.add('show');
     if(!document.getElementById('omSmallCol').value.trim())omSetBadge('small','pending','...');
@@ -93,6 +310,10 @@ var OM_VEHICLE_EXPORT_SEEDS=[
   '\u0635\u0627\u0646\u0639 \u0627\u0644\u0645\u0631\u0643\u0628\u0629','\u0635\u0627\u0646\u0639 \u0627\u0644\u0645\u0631\u0643\u0628\u0647',
   '\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0629','\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0647'
 ];
+var OM_COLOR_TOKENS=['ابيض','أبيض','ازرق','أزرق','احمر','أحمر','اسود','أسود','فضي','رمادي','رصاصي','ذهبي','اخضر','أخضر','بني'];
+var OM_MAKER_TOKENS=['تويوتا','مرسيدس','هيونداي','كيا','نيسان','هوندا','فورد','شيفروليه','جيب','بي ام دبليو','bmw','audi','لكزس'];
+var OM_MODEL_TOKENS=['اكسنت','كريتا','كامري','يارس','النترا','سوناتا','كورولا','اوبتيما','سيراتو','cx5','tucson','rio'];
+var OM_REGTYPE_TOKENS=['خاص','نقل','اجرة','أجرة','دبلوماسي','تجاري'];
 function omNormHeaderForSim(s){
   return String(s||'').normalize('NFKC')
     .replace(/[\u0640\u061c\u200c-\u200f\ufeff]/g,'')
@@ -143,7 +364,33 @@ function omVehicleExportHeaderAutoPick(header){
   }
   return false;
 }
-function omRebuildCheckExportChoices(side,headers,defaultChecked){
+function omHasAnyToken(text,tokens){
+  const t=omNormHeaderForSim(text);
+  if(!t) return false;
+  for(let i=0;i<tokens.length;i++){
+    if(t.indexOf(omNormHeaderForSim(tokens[i]))!==-1) return true;
+  }
+  return false;
+}
+function omVehicleExportContentAutoPick(header,samplesMap){
+  const vals=(samplesMap&&samplesMap[header])||[];
+  if(!vals.length) return false;
+  let hits=0;
+  const total=Math.min(vals.length,25);
+  for(let i=0;i<total;i++){
+    const v=String(vals[i]||'');
+    if(
+      omHasAnyToken(v,OM_COLOR_TOKENS) ||
+      omHasAnyToken(v,OM_MAKER_TOKENS) ||
+      omHasAnyToken(v,OM_MODEL_TOKENS) ||
+      omHasAnyToken(v,OM_REGTYPE_TOKENS)
+    ){
+      hits++;
+    }
+  }
+  return hits>=2 && (hits/Math.max(1,total))>=0.2;
+}
+function omRebuildCheckExportChoices(side,headers,defaultChecked,samplesMap){
   const id=side==='large'?'omLargeExportList':'omSmallExportList';
   const el=document.getElementById(id);
   if(!el) return;
@@ -158,7 +405,9 @@ function omRebuildCheckExportChoices(side,headers,defaultChecked){
     const cb=document.createElement('input');
     cb.type='checkbox';
     cb.value=h;
-    cb.checked=allOn?omVehicleExportHeaderAutoPick(h):false;
+    cb.checked=allOn
+      ? (omVehicleExportHeaderAutoPick(h) || (side==='small' && omVehicleExportContentAutoPick(h,samplesMap)))
+      : false;
     cb.className='check-export-cb check-export-'+side;
     const sp=document.createElement('span');
     sp.textContent=h;
@@ -174,7 +423,7 @@ function omGetCheckExportColsJson(side){
   return JSON.stringify([...boxes].map(b=>b.value));
 }
 function omRemoveCheckFile(side){
-  if(side==='large'){omCheckLargeFile=null;document.getElementById('omLargeFname').textContent='';document.getElementById('omRemoveLargeBtn').classList.remove('show');document.getElementById('omLargeFileIn').value='';const lp=document.getElementById('omLargePw');if(lp)lp.value='';omResetColDropdown('large');omSetBadge('large','pending','\u2014');omClearPersistedCheckFile('large');omClearCheckExportList('large');}
+  if(side==='large'){omLargeNeedsPassword=false;omTempLargeReady=false;omTempLargeFingerprint='';omCheckLargeFile=null;document.getElementById('omLargeFname').textContent='';document.getElementById('omRemoveLargeBtn').classList.remove('show');document.getElementById('omLargeFileIn').value='';const lp=document.getElementById('omLargePw');if(lp)lp.value='';omResetColDropdown('large');omSetBadge('large','pending','\u2014');omClearPersistedCheckFile('large');omClearCheckExportList('large');}
   else{omCheckSmallFile=null;document.getElementById('omSmallFname').textContent='';document.getElementById('omRemoveSmallBtn').classList.remove('show');document.getElementById('omSmallFileIn').value='';omResetColDropdown('small');omSetBadge('small','pending','\u2014');omClearPersistedCheckFile('small');omClearCheckExportList('small');}
   omResetCheckDetect();omCheckRunReady();
 }
@@ -210,18 +459,56 @@ function omResetCheckDetect(){
 function omOnManualColInput(side){const val=document.getElementById(omColId(side)).value.trim();omSetBadge(side,val?'found':'pending',val?'\u25BE \u0645\u062E\u062A\u0627\u0631':'\u2014');if(!val)omAutoDetectCols();omCheckRunReady();}
 function omSetBadge(side,state,text){const b=document.getElementById(omColBadgeId(side));b.className='detect-badge '+state;b.textContent=text;}
 async function omAutoDetectCols(){
-  if(omCheckLargeFile) omDetectColForSide('large');
-  if(omCheckSmallFile) omDetectColForSide('small');
+  if(omCheckLargeFile || (omPostgresLargeEnabled && omUseStoredLarge)) omDetectColForSide('large');
+  if(omCheckSmallFile || omUsingSmallText()) omDetectColForSide('small');
 }
 
 async function omDetectColForSide(side){
+  var usingSmallText=omUsingSmallText();
+  if(side==='large' && omPostgresLargeEnabled && omUseStoredLarge){
+    omSetBadge('large','pending','...');
+    try{
+      const res=await fetch('/api/check/stored-large-meta');
+      const j=await res.json().catch(function(){return{};});
+      if(!res.ok){ omSetBadge('large','notfound','\u26A0 '+(j.detail||res.statusText)); return; }
+      if(!j.has_data||!j.headers||!j.headers.length){
+        omSetBadge('large','notfound','\u0644\u0627 \u0628\u064A\u0627\u0646\u0627\u062A');
+        omRebuildCheckExportChoices('large',[],true);
+        return;
+      }
+      omFillColDropdown('large',j.headers,document.getElementById('omLargeCol').value.trim());
+      document.getElementById('omLargeCol').value='';
+      omSetBadge('large','found','\u2714 \u0645\u062E\u0632\u0651\u0646 ('+String(j.row_count||0)+' \u0635\u0641)');
+      omRebuildCheckExportChoices('large',j.headers||[],true);
+      omCheckLargeHasGps=!!(j.headers&&j.headers.indexOf('GPS')!==-1);
+      const gs=document.getElementById('omGpsMatchSection');
+      if(omCheckLargeHasGps){ gs.style.display=''; if(!document.getElementById('omGpsMyLat').value.trim())omRefreshCheckLoc(); }
+      else{ gs.style.display='none'; }
+    }catch(e){ omSetBadge('large','notfound','\u26A0'); }
+    omCheckRunReady();
+    return;
+  }
+  if(side==='small' && omUsingSmallText()){
+    var lines=omGetSmallPlatesTextLines();
+    omFillColDropdown('small',['رقم اللوحة'],document.getElementById('omSmallCol').value.trim());
+    if(!document.getElementById('omSmallCol').value.trim()) document.getElementById('omSmallCol').value='رقم اللوحة';
+    omSetBadge('small','found','✔ نصي ('+String(lines.length)+' لوحة)');
+    omRebuildCheckExportChoices('small',['رقم اللوحة'],true);
+    omCheckRunReady();
+    return;
+  }
   const fd=new FormData();
   if(side==='large'){
+    if(!omCheckLargeFile){ omSetBadge('large','pending','\u2014'); return; }
     fd.append('large_file',omCheckLargeFile);
     const pw=document.getElementById('omLargePw').value.trim();
     if(pw)fd.append('password',pw);
   } else {
-    fd.append('small_file',omCheckSmallFile);
+    if(usingSmallText){
+      fd.append('small_plates_text',document.getElementById('omSmallPlatesText').value||'');
+    }else{
+      fd.append('small_file',omCheckSmallFile);
+    }
   }
   omSetBadge(side,'pending','...');
   try{
@@ -230,7 +517,12 @@ async function omDetectColForSide(side){
     const data=await res.json();
     const info=side==='large'?data.large:data.small;
     if(!info){return;}
-    if(info.error){omSetBadge(side,'notfound','⚠ '+info.error.slice(0,30));return;}
+    if(info.error){
+      if(side==='large') omLargeNeedsPassword=omIsPasswordRelatedError(info.error);
+      omSetBadge(side,'notfound','⚠ '+info.error.slice(0,30));
+      return;
+    }
+    if(side==='large') omLargeNeedsPassword=false;
     omFillColDropdown(side,info.headers||[],document.getElementById(omColId(side)).value.trim());
     if(info.detected&&!document.getElementById(omColId(side)).value.trim()){
       document.getElementById(omColId(side)).value=info.detected;
@@ -244,7 +536,7 @@ async function omDetectColForSide(side){
       if(info.headers&&info.headers.length)omShowHeadersHint(side,info.headers);
     }
     if((side==='large'||side==='small')&&!info.error){
-      omRebuildCheckExportChoices(side,info.headers||[],true);
+      omRebuildCheckExportChoices(side,info.headers||[],true,info.column_samples||null);
     }
     if(side==='large'&&!info.error){
       omCheckLargeHasGps=!!(info.headers&&info.headers.includes('GPS'));
@@ -268,9 +560,37 @@ function omShowHeadersHint(side,headers){
   content.innerHTML+='<p style="margin-bottom:.5rem"><strong style="color:var(--violet)">'+label+':</strong> \u0627\u0646\u0642\u0631 \u0644\u0627\u062E\u062A\u064A\u0627\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629:</p><div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem">'+
     headers.map(h=>h?'<button onclick="document.getElementById(\''+ti+'\').value=\''+esc(h)+'\';omSetBadge(\''+side+'\',\'found\',\'\u270E \u064A\u062F\u0648\u064A\');omCheckRunReady();document.getElementById(\'omFieldHeadersHint\').style.display=\'none\'" style="padding:.3rem .7rem;background:var(--s2);border:1px solid var(--brd2);border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:.75rem;color:var(--text);transition:all .18s" onmouseover="this.style.borderColor=\'var(--violet)\';this.style.color=\'var(--violet)\'" onmouseout="this.style.borderColor=\'var(--brd2)\';this.style.color=\'var(--text)\'">'+esc(h)+'</button>':'').join('')+'</div>';
 }
-function omCheckRunReady(){document.getElementById('omMatchBtn').disabled=!(omCheckLargeFile&&omCheckSmallFile);}
+function omCheckRunReady(){
+  var hasSmall=!!omCheckSmallFile || omUsingSmallText();
+  var hasLarge=!!omCheckLargeFile;
+  var ok=hasSmall && (hasLarge || (omPostgresLargeEnabled && omUseStoredLarge));
+  document.getElementById('omMatchBtn').disabled=!ok;
+}
 async function omRunMatch(){
-  if(!omCheckLargeFile||!omCheckSmallFile){omShowFieldStatus('err','\u064A\u0631\u062C\u0649 \u0631\u0641\u0639 \u0643\u0644\u0627 \u0627\u0644\u0645\u0644\u0641\u064A\u0646');return;}
+  var usingSmallText=omUsingSmallText();
+  if(!omCheckSmallFile && !usingSmallText){
+    omShowFieldStatus('err','\u064A\u0631\u062C\u0649 \u0631\u0641\u0639 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0635\u063A\u064A\u0631 \u0623\u0648 \u0625\u062F\u062E\u0627\u0644 \u0644\u0648\u062D\u0627\u062A \u0646\u0635\u064A\u0629');
+    return;
+  }
+  var useStored=omPostgresLargeEnabled && omUseStoredLarge;
+  if(omPostgresLargeEnabled && usingSmallText && !useStored){
+    document.getElementById('omFieldHeadersHint').style.display='none';document.getElementById('omFieldHeadersContent').innerHTML='';
+    document.getElementById('omGpsResultBox').classList.remove('show');
+    document.getElementById('omGpsProgress').style.display='none';
+    omShowFieldStatus('proc','جاري فحص اللوحات النصية …',true);document.getElementById('omMatchBtn').disabled=true;
+    try{
+      await omRunTempTextCheck();
+    }catch(e){
+      omShowFieldStatus('err','خطأ: '+(e.message||e));
+    }finally{
+      document.getElementById('omMatchBtn').disabled=false;
+    }
+    return;
+  }
+  if(!omCheckLargeFile && !useStored){
+    omShowFieldStatus('err','\u064A\u0631\u062C\u0649 \u0631\u0641\u0639 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0643\u0628\u064A\u0631\u060C \u0623\u0648 \u0641\u0639\u0651\u0644 \u00ab\u0627\u0633\u062A\u062E\u062F\u0627\u0645 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u0645\u062E\u0632\u0651\u0646\u0629\u00bb \u0628\u0639\u062F \u0627\u0633\u062A\u064A\u0631\u0627\u062F \u0627\u0644\u0643\u0628\u064A\u0631 \u0625\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645');
+    return;
+  }
   omCheckResultBlob=null;document.getElementById('omResultBox').classList.remove('show');
   omRenderCheckMatchPreview(null);
   document.getElementById('omFieldHeadersHint').style.display='none';document.getElementById('omFieldHeadersContent').innerHTML='';
@@ -279,7 +599,17 @@ async function omRunMatch(){
   document.getElementById('omGpsResultTableBody').innerHTML='';
   omShowFieldStatus('proc','\u062C\u0627\u0631\u064A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2026',true);document.getElementById('omMatchBtn').disabled=true;
   try{
-    const fd=new FormData();fd.append('large_file',omCheckLargeFile);fd.append('small_file',omCheckSmallFile);
+    const fd=new FormData();
+    if(!(omPostgresLargeEnabled && omUseStoredLarge)){
+      fd.append('large_file',omCheckLargeFile);
+    } else {
+      fd.append('use_stored_large','true');
+    }
+    if(usingSmallText){
+      fd.append('small_plates_text',document.getElementById('omSmallPlatesText').value||'');
+    }else{
+      fd.append('small_file',omCheckSmallFile);
+    }
     const pw=document.getElementById('omLargePw').value.trim();if(pw)fd.append('password',pw);
     const lc=document.getElementById('omLargeCol').value.trim();if(lc)fd.append('large_col',lc);
     const sc=document.getElementById('omSmallCol').value.trim();if(sc)fd.append('small_col',sc);
@@ -468,9 +798,23 @@ async function omOpenExcelResult(){
 }
 function omTogglePw(inputId,btn){const inp=document.getElementById(inputId);inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'\uD83D\uDC41':'\uD83D\uDE48';}
 function omConfirmLargePw(){
+  if(omPostgresLargeEnabled && omUseStoredLarge){
+    omResetCheckDetect();
+    omDetectColForSide('large');
+    return;
+  }
   if(!omCheckLargeFile){omShowFieldStatus('err','يرجى رفع الملف الكبير أولاً');return;}
   omResetCheckDetect();
-  omDetectColForSide('large');
+  omDetectColForSide('large').then(function(){
+    if(omPostgresLargeEnabled && !omUseStoredLarge){
+      var pw=document.getElementById('omLargePw').value.trim();
+      if(omLargeNeedsPassword && !pw){
+        omShowFieldStatus('err','يرجى إدخال كلمة مرور الملف الكبير أولاً.');
+        return;
+      }
+      omImportLargeToServer();
+    }
+  });
 }
 function omRefreshCheckLoc(){
   const btn=document.getElementById('omGpsLocBtn');btn.disabled=true;omSetCheckLocDot('','\u062C\u0627\u0631\u064A...');
@@ -496,11 +840,23 @@ async function omRunGpsNearestAfterMatch(){
   omShowFieldStatus('proc','\u062C\u0627\u0631\u064A \u0645\u0637\u0627\u0628\u0642\u0629 GPS (\u0623\u0642\u0631\u0628 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A) \u2026',true);
   let vehicles=[];
   try{
-    const fd=new FormData();fd.append('large_file',omCheckLargeFile);fd.append('small_file',omCheckSmallFile);
-    const pw=document.getElementById('omLargePw').value.trim();if(pw)fd.append('password',pw);
-    const lc=document.getElementById('omLargeCol').value.trim();if(lc)fd.append('large_col',lc);
-    const sc=document.getElementById('omSmallCol').value.trim();if(sc)fd.append('small_col',sc);
-    const res=await fetch('/api/check-gps-data',{method:'POST',body:fd});
+    const fd=new FormData();
+    let res;
+    if(omPostgresLargeEnabled && omUseStoredLarge){
+      if(usingSmallText){
+      fd.append('small_plates_text',document.getElementById('omSmallPlatesText').value||'');
+    }else{
+      fd.append('small_file',omCheckSmallFile);
+    }
+      const sc2=document.getElementById('omSmallCol').value.trim();if(sc2)fd.append('small_col',sc2);
+      res=await fetch('/api/check/gps-stored',{method:'POST',body:fd});
+    } else {
+      fd.append('large_file',omCheckLargeFile);fd.append('small_file',omCheckSmallFile);
+      const pw=document.getElementById('omLargePw').value.trim();if(pw)fd.append('password',pw);
+      const lc=document.getElementById('omLargeCol').value.trim();if(lc)fd.append('large_col',lc);
+      const sc=document.getElementById('omSmallCol').value.trim();if(sc)fd.append('small_col',sc);
+      res=await fetch('/api/check-gps-data',{method:'POST',body:fd});
+    }
     const data=await res.json();
     if(!res.ok){omShowFieldStatus('warn','\u2705 \u062A\u0645\u062A \u0645\u0637\u0627\u0628\u0642\u0629 Excel. GPS: '+String(data.detail||'\u062E\u0637\u0623'));omGpsReset();return;}
     if(!data.vehicles||!data.vehicles.length){

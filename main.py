@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -19,12 +20,19 @@ from routers.check import router as check_router
 from routers.check_live_ws import router as check_live_ws_router
 from routers.gps import router as gps_router
 from routers.admin import router as admin_router
+from routers.admin_check_storage import router as admin_check_storage_router
 from routers.auth import router as auth_router
 from services import gemini
 from services import job_store as job_store_svc
+from services.check_queue import start_check_queue, stop_check_queue
+from routers.check import process_check_queue_item
+from services.check_postgres import ensure_check_pg_schema
 from services.rate_limit import limiter, rate_limit_exceeded_handler
 from services.security import hash_password
 from slowapi.errors import RateLimitExceeded
+
+
+logger = logging.getLogger(__name__)
 
 
 # SECURITY FIX: fail fast when sensitive env vars are left on unsafe defaults.
@@ -104,8 +112,17 @@ def _startup_db_sync() -> None:
 async def lifespan(app: FastAPI):
     await job_store_svc.init_job_store()
     await gemini.init_http_client()
+    await start_check_queue(process_check_queue_item)
+    dsn_pg = (settings.check_postgres_dsn or "").strip()
+    if dsn_pg:
+        try:
+            await asyncio.to_thread(ensure_check_pg_schema, dsn_pg)
+        except Exception:
+            # Fail-open: app still runs; check Postgres routes will error until DSN/schema fixed.
+            logger.exception("check_postgres schema init failed (CHECK_POSTGRES_URL)")
     await asyncio.to_thread(_startup_db_sync)
     yield
+    await stop_check_queue()
     await gemini.close_http_client()
     await job_store_svc.close_job_store()
 
@@ -140,6 +157,7 @@ app.include_router(gps_router)
 
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(admin_check_storage_router)
 
 
 @app.get("/health", tags=["health"])
@@ -154,6 +172,23 @@ if static_path.exists():
         StaticFiles(directory=str(static_path)),
         name="static",
     )
+
+
+@app.get("/admin/check-storage", response_class=HTMLResponse, include_in_schema=False)
+async def admin_check_storage_page():
+    """لوحة إدارة: استيراد الفرز (Postgres) لكل مستخدم."""
+    f = static_path / "admin-check-storage.html"
+    if f.exists():
+        async with aiofiles.open(str(f), mode="r", encoding="utf-8") as fh:
+            return HTMLResponse(
+                content=await fh.read(),
+                headers={
+                    "Cache-Control": "no-store, no-cache, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                },
+            )
+    return HTMLResponse("<p>admin-check-storage.html not found</p>", status_code=404)
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

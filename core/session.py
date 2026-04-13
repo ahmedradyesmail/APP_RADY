@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,18 +16,44 @@ class SessionState:
     excel_plate_column: str = ""
     excel_active_sheet: str = ""
     last_live_check_key: str = ""
-    last_model_plate_key: str = ""
+    # Normalized plate keys already emitted this model turn (partial + final dedupe).
+    model_plate_norm_keys: set[str] = field(default_factory=set)
     text_buffer: str = ""
     input_transcript: str = ""
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    connected: bool = False
 
 
 _sessions: dict[str, SessionState] = {}
 
 
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def create_session(session_id: str) -> SessionState:
     s = SessionState()
+    s.last_activity_at = _now_utc()
     _sessions[session_id] = s
     return s
+
+
+def get_session(session_id: str) -> SessionState | None:
+    return _sessions.get(session_id)
+
+
+def get_or_create_session(session_id: str) -> SessionState:
+    s = _sessions.get(session_id)
+    if s is None:
+        s = create_session(session_id)
+    return s
+
+
+def touch_session(session_id: str) -> None:
+    s = _sessions.get(session_id)
+    if s is not None:
+        s.last_activity_at = _now_utc()
 
 
 def remove_session(session_id: str) -> None:

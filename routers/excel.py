@@ -61,6 +61,14 @@ def _mid_gps_value(valid_rows: list[dict]) -> str:
     return str(valid_rows[mid_idx].get("gps", "") or "").strip()
 
 
+def _row_street_location(r: dict) -> str:
+    """Per-row موقع الشارع from API; legacy rows fall back to that row's GPS."""
+    s = str(r.get("street_location", "") or "").strip()
+    if s:
+        return s
+    return _mid_gps_value([r])
+
+
 @router.post("/export-excel")
 async def export_excel(
     rows_json:  str = Form("[]"),
@@ -105,8 +113,6 @@ async def export_excel(
         rr["full_plate"] = normalized
         valid_rows.append(rr)
 
-    street_location = _mid_gps_value(valid_rows)
-
     for i, r in enumerate(valid_rows, 1):
         fill = fe if i % 2 == 0 else fo
         vals = [
@@ -117,7 +123,7 @@ async def export_excel(
             r.get("location_details", ""),
             r.get("vehicle_type", "ملاكى"),
             r.get("recorder_name", ""),
-            street_location,
+            _row_street_location(r),
         ]
         for col, v in enumerate(vals, 1):
             cell = ws.cell(row=i + 1, column=col, value=v)
@@ -196,8 +202,6 @@ async def export_field_check(
         rr["full_plate"] = normalized
         valid_rows.append(rr)
 
-    street_location = _mid_gps_value(valid_rows)
-
     for i, r in enumerate(valid_rows, 1):
         fill = fe if i % 2 == 0 else fo
         vals = [
@@ -208,7 +212,7 @@ async def export_field_check(
             r.get("location_details", ""),
             r.get("vehicle_type", "ملاكى"),
             r.get("recorder_name", ""),
-            street_location,
+            _row_street_location(r),
         ]
         for col, v in enumerate(vals, 1):
             cell = ws.cell(row=i + 1, column=col, value=v)
@@ -267,6 +271,13 @@ def _parse_excel_sync(content: bytes) -> tuple[list[dict], int]:
                 return cell_at(i)
             return cell_at(fallback)
 
+        def col_street_location(fallback: int) -> str:
+            for i, h in enumerate(headers):
+                hs = str(h).strip() if h else ""
+                if hs == "موقع الشارع":
+                    return cell_at(i)
+            return cell_at(fallback)
+
         # Fallback indices: new export order (no #): plate, gps, date, street, details, vehicle, recorder, street_loc
         # Legacy files with "#" column still match by header text first.
         rows_out.append({
@@ -277,6 +288,7 @@ def _parse_excel_sync(content: bytes) -> tuple[list[dict], int]:
             "location_details": col("الموقع", 4),
             "vehicle_type":     col("المركبة", 5),
             "recorder_name":    col("المسجّل", 6),
+            "street_location":  col_street_location(7),
             "notes":            col("ملاحظات", -1),
         })
 

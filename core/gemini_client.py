@@ -44,9 +44,21 @@ Rules:
 
 Valid example: {"plate":"وصر 4923"}"""
 
-LIVE_MODEL = "models/gemini-3.1-flash-live-preview"
-# Voice for Live AUDIO modality (stable setup on current Gemini Live models).
+# Live model IDs change; use env to override without code edits.
+# If you see WebSocket 1011 on connect, try another ID from https://ai.google.dev/gemini-api/docs/models
+_DEFAULT_LIVE_MODELS = (
+    "models/gemini-3.1-flash-live",
+    "models/gemini-3.1-flash-live-preview",
+    "models/gemini-2.5-flash-native-audio-preview-12-2025",
+)
 _LIVE_VOICE = os.getenv("GEMINI_LIVE_VOICE", "Kore")
+
+
+def _live_model_candidates() -> list[str]:
+    single = (os.getenv("GEMINI_LIVE_MODEL") or "").strip()
+    if single:
+        return [single]
+    return list(_DEFAULT_LIVE_MODELS)
 
 class GeminiLiveSession:
     """Thin wrapper around a raw WebSocket to Gemini Live."""
@@ -95,7 +107,7 @@ class GeminiLiveSession:
             pass
 
 
-async def _try_connect(api_key: str, model: str):
+async def _try_connect_one(api_key: str, model: str) -> GeminiLiveSession:
     url = f"{GEMINI_WS_URL}?key={api_key}"
     ws = await websockets.connect(
         url,
@@ -127,14 +139,45 @@ async def _try_connect(api_key: str, model: str):
             },
         }
     }
-    await ws.send(json.dumps(setup))
-    resp_raw = await asyncio.wait_for(ws.recv(), timeout=10)
-    resp = json.loads(resp_raw)
-    if "error" in resp:
-        await ws.close()
-        raise RuntimeError(f"Setup error: {resp['error']}")
-    logger.info("Connected Live model: %s", model)
-    return GeminiLiveSession(ws)
+    try:
+        await ws.send(json.dumps(setup))
+        resp_raw = await asyncio.wait_for(ws.recv(), timeout=15)
+        resp = json.loads(resp_raw)
+        if "error" in resp:
+            await ws.close()
+            raise RuntimeError(f"Setup error: {resp['error']}")
+        logger.info("Connected Live model: %s", model)
+        return GeminiLiveSession(ws)
+    except Exception:
+        try:
+            await ws.close()
+        except Exception:
+            pass
+        raise
+
+
+async def _try_connect(api_key: str) -> GeminiLiveSession:
+    last_err: Exception | None = None
+    for model in _live_model_candidates():
+        try:
+            return await _try_connect_one(api_key, model)
+        except websockets.exceptions.ConnectionClosedError as e:
+            last_err = e
+            logger.warning(
+                "Live WS closed during setup model=%s code=%s reason=%s",
+                model,
+                getattr(e, "code", None),
+                getattr(e, "reason", None) or str(e),
+            )
+        except Exception as e:
+            last_err = e
+            logger.warning("Live setup failed model=%s: %s", model, e)
+    raise RuntimeError(
+        "Could not start Gemini Live session. "
+        "Set GEMINI_LIVE_MODEL to a valid Live model from "
+        "https://ai.google.dev/gemini-api/docs/models — last error: "
+        f"{last_err!r}"
+    ) from last_err
 
 
 @asynccontextmanager
@@ -143,8 +186,9 @@ async def create_gemini_session(api_key: str | None = None):
     if not key:
         raise ValueError("GEMINI API key missing (init message or GEMINI_API_KEY in .env)")
 
-    logger.info("Connecting Live model: %s", LIVE_MODEL)
-    session = await _try_connect(key, LIVE_MODEL)
+    candidates = _live_model_candidates()
+    logger.info("Connecting Live (candidates=%s)", candidates)
+    session = await _try_connect(key)
     try:
         yield session
     finally:

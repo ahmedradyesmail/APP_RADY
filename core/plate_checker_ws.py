@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import traceback
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import WebSocket
@@ -14,7 +15,13 @@ from starlette.websockets import WebSocketDisconnect
 
 from config import settings
 from core.gemini_client import create_gemini_session
-from core.session import SessionState, create_session, remove_session
+from core.session import (
+    SessionState,
+    get_session,
+    get_or_create_session,
+    remove_session,
+    touch_session,
+)
 from core.excel_loader import (
     format_plate_display,
     lookup_plate,
@@ -28,6 +35,45 @@ from core.excel_loader import (
 logger = logging.getLogger(__name__)
 
 _live_sem = asyncio.Semaphore(max(1, int(settings.gemini_live_max_concurrent)))
+_live_idle_ttl = max(60, int(settings.check_live_idle_ttl_seconds))
+_live_hard_ttl = max(_live_idle_ttl, int(settings.check_live_hard_ttl_seconds))
+_live_cleanup_tasks: dict[str, asyncio.Task] = {}
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _cancel_cleanup_task(session_key: str) -> None:
+    task = _live_cleanup_tasks.pop(session_key, None)
+    if task and not task.done():
+        task.cancel()
+        logger.info("Session %s cleanup cancelled - User returned.", session_key)
+
+
+async def _schedule_idle_cleanup(session_key: str) -> None:
+    try:
+        await asyncio.sleep(_live_idle_ttl)
+        session = get_session(session_key)
+        if session is None:
+            return
+        if session.connected:
+            return
+        idle_sec = (_utc_now() - session.last_activity_at).total_seconds()
+        age_sec = (_utc_now() - session.created_at).total_seconds()
+        if idle_sec >= _live_idle_ttl or age_sec >= _live_hard_ttl:
+            if session.genai_session:
+                try:
+                    await session.genai_session.close()
+                except Exception:
+                    logger.debug("Failed to close genai session for %s", session_key)
+                session.genai_session = None
+            remove_session(session_key)
+            logger.info("Session %s cleaned up after 30m idl", session_key)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _live_cleanup_tasks.pop(session_key, None)
 
 
 async def _send(websocket: WebSocket, payload: dict) -> None:
@@ -220,17 +266,17 @@ async def _emit_plate_result(
 async def _emit_model_plate_if_new(
     websocket: WebSocket, session: SessionState, plate: Any
 ) -> bool:
-    """Deduplicate partial/final model emissions for the same normalized plate."""
+    """Deduplicate partial/final model emissions for the same normalized plate(s) per turn."""
     if plate is None:
         return False
     raw = str(plate).strip()
     if not raw:
         return False
     key = normalize_plate(raw)
-    if key and key == session.last_model_plate_key:
+    if key and key in session.model_plate_norm_keys:
         return False
     if key:
-        session.last_model_plate_key = key
+        session.model_plate_norm_keys.add(key)
     await _emit_plate_result(websocket, session, raw)
     return True
 
@@ -256,10 +302,13 @@ async def _process_plate_text(
         await _emit_model_plate_if_new(websocket, session, plate)
 
 
-async def handle_client_messages(websocket: WebSocket, session: SessionState) -> None:
+async def handle_client_messages(
+    websocket: WebSocket, session: SessionState, session_key: str
+) -> None:
     try:
         while True:
             raw = await websocket.receive_text()
+            touch_session(session_key)
             try:
                 data = json.loads(raw)
                 msg_type = data.get("type")
@@ -292,6 +341,7 @@ async def handle_client_messages(websocket: WebSocket, session: SessionState) ->
                         session.excel_plate_column = ""
                         session.excel_active_sheet = ""
                         session.last_live_check_key = ""
+                        session.model_plate_norm_keys.clear()
                         columns_by_sheet = {n: sheets_map[n][1] for n in sheet_names}
                         await _send(
                             websocket,
@@ -333,6 +383,7 @@ async def handle_client_messages(websocket: WebSocket, session: SessionState) ->
                         session.excel_plates = merged
                         session.excel_plate_column = col
                         session.last_live_check_key = ""
+                        session.model_plate_norm_keys.clear()
                         await _send(
                             websocket,
                             {
@@ -346,10 +397,6 @@ async def handle_client_messages(websocket: WebSocket, session: SessionState) ->
                     except ValueError as e:
                         await _send_error(websocket, str(e), "excel_error")
 
-                elif msg_type == "manual_lookup":
-                    plate_raw = data.get("plate", "")
-                    await _emit_plate_result(websocket, session, plate_raw)
-
                 elif msg_type == "audio":
                     if session.genai_session:
                         await session.genai_session.send_audio(data.get("data", ""))
@@ -361,6 +408,8 @@ async def handle_client_messages(websocket: WebSocket, session: SessionState) ->
                 elif msg_type == "text":
                     if session.genai_session:
                         await session.genai_session.send_text(data.get("data", ""))
+                elif msg_type == "ping":
+                    await _send(websocket, {"type": "pong", "data": {}})
 
             except Exception as e:
                 logger.error(
@@ -381,7 +430,7 @@ async def handle_gemini_responses(websocket: WebSocket, session: SessionState) -
                     session.text_buffer = ""
                     session.input_transcript = ""
                     session.last_live_check_key = ""
-                    session.last_model_plate_key = ""
+                    session.model_plate_norm_keys.clear()
                     continue
 
                 sc = msg.get("serverContent", {})
@@ -420,7 +469,7 @@ async def handle_gemini_responses(websocket: WebSocket, session: SessionState) -
                     session.text_buffer = ""
                     session.input_transcript = ""
                     session.last_live_check_key = ""
-                    session.last_model_plate_key = ""
+                    session.model_plate_norm_keys.clear()
                     await _send(websocket, {"type": "turn_complete"})
 
             except Exception as e:
@@ -443,10 +492,10 @@ async def cleanup_session(session: Optional[SessionState], session_id: str) -> N
         logger.error("Cleanup error: %s", e)
 
 
-async def handle_plate_checker_client(websocket: WebSocket) -> None:
-    session_id = str(id(websocket))
-    session = create_session(session_id)
-    logger.info("New Live check connection: %s", session_id)
+async def handle_plate_checker_client(websocket: WebSocket, user_id: int) -> None:
+    session_key = ""
+    session: SessionState | None = None
+    logger.info("New Live check connection user_id=%s", user_id)
 
     try:
         raw_init = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
@@ -457,8 +506,24 @@ async def handle_plate_checker_client(websocket: WebSocket) -> None:
                 "الرسالة الأولى يجب أن تكون init مع api_key",
                 "general",
             )
-            await cleanup_session(session, session_id)
+            if session:
+                await cleanup_session(session, session_key or str(user_id))
             return
+        client_id = (init.get("client_id") or "").strip()
+        if not client_id:
+            await _send_error(
+                websocket,
+                "Missing client_id",
+                "general",
+            )
+            if session:
+                await cleanup_session(session, session_key or str(user_id))
+            return
+        session_key = f"{user_id}:{client_id}"
+        _cancel_cleanup_task(session_key)
+        session = get_or_create_session(session_key)
+        session.connected = True
+        touch_session(session_key)
         api_key = (init.get("api_key") or "").strip() or os.getenv(
             "GEMINI_API_KEY", ""
         )
@@ -468,7 +533,10 @@ async def handle_plate_checker_client(websocket: WebSocket) -> None:
                 "مفتاح Gemini غير موجود — أضفه في الإعدادات أو GEMINI_API_KEY",
                 "general",
             )
-            await cleanup_session(session, session_id)
+            session.connected = False
+            _live_cleanup_tasks[session_key] = asyncio.create_task(
+                _schedule_idle_cleanup(session_key)
+            )
             return
     except (TimeoutError, json.JSONDecodeError, WebSocketDisconnect) as e:
         logger.info("Live check init failed: %s", e)
@@ -476,17 +544,23 @@ async def handle_plate_checker_client(websocket: WebSocket) -> None:
             await websocket.close(code=4408)
         except Exception:
             pass
-        await cleanup_session(session, session_id)
+        if session_key and session:
+            session.connected = False
+            _live_cleanup_tasks[session_key] = asyncio.create_task(
+                _schedule_idle_cleanup(session_key)
+            )
         return
 
     try:
         async with _live_sem:
+            if session is None:
+                raise RuntimeError("Session not initialized")
             async with create_gemini_session(api_key) as gemini_session:
                 session.genai_session = gemini_session
                 await _send(websocket, {"type": "ready"})
 
                 client_task = asyncio.create_task(
-                    handle_client_messages(websocket, session)
+                    handle_client_messages(websocket, session, session_key)
                 )
                 gemini_task = asyncio.create_task(
                     handle_gemini_responses(websocket, session)
@@ -519,4 +593,11 @@ async def handle_plate_checker_client(websocket: WebSocket) -> None:
             logger.error("Session error: %s\n%s", e, traceback.format_exc())
             await _send_error(websocket, "حدث خطأ، حاول مرة أخرى.", "general")
     finally:
-        await cleanup_session(session, session_id)
+        if session_key and session:
+            session.connected = False
+            session.genai_session = None
+            touch_session(session_key)
+            _cancel_cleanup_task(session_key)
+            _live_cleanup_tasks[session_key] = asyncio.create_task(
+                _schedule_idle_cleanup(session_key)
+            )

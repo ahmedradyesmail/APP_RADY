@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>فرز Postgres — إدارة</title>
+  <style>
+    body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:1.25rem;line-height:1.5}
+    h1{font-size:1.1rem;margin:0 0 1rem}
+    .err{color:#fca5a5}.ok{color:#86efac}
+    table{width:100%;border-collapse:collapse;font-size:.85rem}
+    th,td{border:1px solid #334155;padding:.45rem .55rem;text-align:right}
+    th{background:#1e293b}
+    button{background:#3b82f6;color:#fff;border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;font-size:.85rem}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    #msg{margin:.75rem 0;font-family:ui-monospace,monospace;font-size:.78rem}
+    a{color:#93c5fd}
+  </style>
+</head>
+<body>
+  <h1>استيراد الفرز (Postgres) — ملخص لكل مستخدم</h1>
+  <p style="font-size:.8rem;color:#94a3b8">يتطلب تسجيل دخول كـ Admin. استخدم نفس الجلسة من التطبيق الرئيسي أو الصق <code>access_token</code> أدناه.</p>
+  <div style="margin:.75rem 0;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center">
+    <button type="button" id="loadBtn">تحديث القائمة</button>
+    <label style="font-size:.78rem;color:#94a3b8">أو Bearer يدوي:
+      <input id="tokIn" type="password" placeholder="access_token" style="width:min(420px,90vw);padding:.35rem .5rem;border-radius:4px;border:1px solid #475569;background:#1e293b;color:#e2e8f0"/>
+    </label>
+  </div>
+  <div id="msg"></div>
+  <div class="tbl-outer">
+    <table>
+      <thead><tr><th>user_id</th><th>عدد الاستيرادات</th><th>rows</th><th>updated_at</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <p style="margin-top:1.2rem;font-size:.75rem;color:#64748b"><a href="/">← الرئيسية</a></p>
+  <script>
+  function token(){
+    var m=document.getElementById('tokIn').value.trim();
+    if(m) return m;
+    try{ return localStorage.getItem('access_token')||''; }catch(e){ return ''; }
+  }
+  async function load(){
+    var msg=document.getElementById('msg');
+    var tb=document.getElementById('tbody');
+    var btn=document.getElementById('loadBtn');
+    var t=token();
+    if(!t){ msg.className='err'; msg.textContent='لا يوجد token — سجّل الدخول من الصفحة الرئيسية أو الصق access_token.'; return; }
+    btn.disabled=true;
+    msg.textContent='جاري التحميل…';
+    msg.className='';
+    tb.innerHTML='';
+    try{
+      var r=await fetch('/api/admin/check-storage/summary',{headers:{'Authorization':'Bearer '+t}});
+      var j=await r.json().catch(function(){return{};});
+      if(!r.ok) throw new Error(j.detail||r.statusText||'فشل');
+      var items=(j.items)||[];
+      if(!items.length){
+        msg.className='ok';
+        msg.textContent='لا توجد بيانات مستوردة.';
+        btn.disabled=false;
+        return;
+      }
+      items.forEach(function(it){
+        var tr=document.createElement('tr');
+        tr.innerHTML='<td>'+it.user_id+'</td><td>'+(it.import_count!=null?it.import_count:'')+'</td><td>'+it.row_count+'</td><td style="font-family:monospace;font-size:.72rem">'+(it.updated_at||'')+'</td>';
+        tb.appendChild(tr);
+      });
+      msg.className='ok';
+      msg.textContent='تم — '+items.length+' مستخدم(ين).';
+    }catch(e){
+      msg.className='err';
+      msg.textContent='خطأ: '+e.message;
+    }
+    btn.disabled=false;
+  }
+  function escapeHtml(s){
+    var d=document.createElement('div');
+    d.textContent=s==null?'':String(s);
+    return d.innerHTML;
+  }
+  document.getElementById('loadBtn').addEventListener('click',load);
+  load();
+  </script>
+</body>
+</html>

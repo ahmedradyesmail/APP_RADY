@@ -315,7 +315,16 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .live-plate-item.hit{background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.4);color:var(--green)}
 .live-plate-item.miss{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:var(--red)}
 .live-plate-item.unk{background:var(--s2);border:1px solid var(--brd2);color:var(--dim2)}
-#checkLivePlateList{min-height:2rem;max-height:42vh;overflow-y:auto}
+.check-live-plate-wrap{margin-top:.85rem}
+.check-live-plate-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.55rem;flex-wrap:wrap}
+.check-live-plate-head .ptitle-inline{font-size:.78rem;font-weight:800;color:var(--text);font-family:var(--ar)}
+.check-live-plate-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;direction:rtl;align-items:start}
+.check-live-col{display:flex;flex-direction:column;min-width:0}
+.check-live-col-h{font-size:.7rem;font-weight:800;margin-bottom:.4rem;padding:.38rem .5rem;border-radius:6px;text-align:center;font-family:var(--ar);line-height:1.35}
+.check-live-col-h.hit{background:rgba(34,197,94,.18);color:var(--green);border:1px solid rgba(34,197,94,.35)}
+.check-live-col-h.miss{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.35)}
+.check-live-plate-scroll{min-height:3rem;max-height:36vh;overflow-y:auto;border:1px solid var(--brd2);border-radius:8px;padding:.45rem;background:var(--s1)}
+@media(max-width:520px){.check-live-plate-grid{grid-template-columns:1fr}}
 
 /* ── Activity log ── */
 .log-panel{background:var(--s1);border:1px solid var(--brd);border-radius:var(--r);margin-bottom:1rem;box-shadow:var(--card-shadow);overflow:hidden}
@@ -681,6 +690,17 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <h2>&#x1F50D; الفرز &mdash; مطابقة اللوحات</h2>
     <p>ارفع الملف الكبير والملف الصغير، وسيتم اكتشاف عمود اللوحة تلقائياً والمطابقة فور الضغط. يدعم تصدير Excel ومطابقة GPS عند وجود عمود GPS في الملف الكبير.</p>
   </div>
+  <div id="omPgStoragePanel" class="panel violet-accent" style="display:none;margin-bottom:1rem">
+    <div class="ptitle violet">&#x1F5C4; تخزين الملف الكبير على الخادم (Postgres)</div>
+    <p style="font-size:.74rem;color:var(--dim2);line-height:1.65">يمكنك استيراد <strong>عدة ملفات كبيرة</strong>؛ كل ملف <strong>ورقة عمل واحدة</strong> وبحد أقصى <strong>15MB</strong> لكل ملف. الحد الإجمالي للصفوف المخزّنة لكل مستخدم <strong>3 مليون</strong> صف. المطابقة تتم من الملف الصغير إلى <strong>كل</strong> البيانات المخزّنة مع تطبيع رقم اللوحة؛ عمود النتيجة الأول يعرض رقم اللوحة المطابقة، وفي آخر الشيت يُذكر إن وُجدت لوحة في أكثر من ملف.</p>
+    <div id="omStoredImportsList" style="margin-top:.6rem;font-size:.74rem"></div>
+    <label style="display:flex;align-items:center;gap:.55rem;font-size:.8rem;margin:.55rem 0;cursor:pointer">
+      <input type="checkbox" id="omUseStoredLargeCb" onchange="omOnToggleStoredLarge()"/>
+      استخدام البيانات المخزّنة للمطابقة (بدون رفع الملف الكبير مع كل Match)
+    </label>
+    <p style="font-size:.72rem;color:var(--dim2);margin-top:.45rem">رفع الملف الكبير في صفحة الفرز = استيراد تلقائي مباشر إلى قاعدة البيانات.</p>
+    <div id="omPgImportHint" style="font-size:.7rem;color:var(--dim2);margin-top:.5rem;font-family:var(--mono)"></div>
+  </div>
   <div class="file-grid">
     <div class="file-card sky-card">
       <div class="fc-label sky">&#x1F4C2; الملف الكبير <span class="fc-badge large-badge">مصدر البيانات</span></div>
@@ -733,6 +753,14 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
         <button class="rm-btn" id="omRemoveSmallBtn" onclick="omRemoveCheckFile('small')">&#x2715; إزالة</button>
       </div>
       <input type="file" id="omSmallFileIn" accept=".xlsx,.xls" onchange="omOnCheckFileChange(this.files[0],'small')"/>
+      <div style="margin-top:.7rem">
+        <label class="lbl">أو الصق اللوحات نصيًا (سطر لكل لوحة)</label>
+        <textarea id="omSmallPlatesText" rows="8" placeholder="مثال:
+ر ك ع 7511
+ر م ي 8802
+ر ي و 4146" style="width:100%;resize:vertical;font-family:var(--mono);font-size:.78rem;line-height:1.7" oninput="omOnSmallTextInput()"></textarea>
+        <p class="check-export-hint" style="margin-top:.35rem">إذا أدخلت نص هنا سيتم استخدامه بدل الملف الصغير تلقائيًا.</p>
+      </div>
       <div style="margin-top:.75rem"><label class="lbl">عمود اللوحة في الملف الصغير</label>
         <div class="col-detect-row">
           <select id="omSmallCol" onchange="omOnManualColInput('small')">
@@ -893,24 +921,23 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     </div>
     <div id="checkLiveTranscript" class="glog" style="height:auto;min-height:52px;margin-bottom:.85rem;max-height:100px"></div>
     <button type="button" class="check-run-btn" id="checkLiveToggleBtn" onclick="checkLiveToggleMic()">&#x1F399; ابدأ الاستماع</button>
+    <div class="check-live-plate-wrap">
+      <div class="check-live-plate-head">
+        <span class="ptitle-inline">&#x1F4CB; لوحات أعادها النموذج</span>
+        <button type="button" class="tb-btn outline" onclick="checkLiveClearPlates()">&#x1F5D1; مسح القائمة</button>
+      </div>
+      <div class="check-live-plate-grid">
+        <div class="check-live-col">
+          <div class="check-live-col-h hit">&#x2714; موجود في الشيت</div>
+          <div id="checkLivePlateColHit" class="check-live-plate-scroll"></div>
+        </div>
+        <div class="check-live-col">
+          <div class="check-live-col-h miss">&#x2716; غير موجود في الشيت</div>
+          <div id="checkLivePlateColMiss" class="check-live-plate-scroll"></div>
+        </div>
+      </div>
+    </div>
     <p style="font-size:.71rem;color:var(--dim2);margin-top:.55rem;line-height:1.55">نفس مفتاح Gemini في &#x2699; الإعدادات. الصوت يُرسل كـ PCM 16kHz. عند انتهاء الجملة أرسل إشارة نهاية الدور تلقائياً.</p>
-  </div>
-
-  <div class="fc-plate-check" style="margin-top:1rem">
-    <div class="lbl" style="margin-bottom:.4rem">&#x270F;&#xFE0F; فحص يدوي</div>
-    <div class="fc-plate-check-row">
-      <input type="text" id="chkManualPlate" class="fc-plate-check-input" placeholder="مثال: وصر 1234" dir="auto"/>
-      <button type="button" class="fc-plate-check-btn" onclick="checkLiveManualLookup()">فحص</button>
-    </div>
-    <div id="chkManualState" class="fc-plate-check-state">يتطلب اتصالاً نشطاً بالبث</div>
-  </div>
-
-  <div class="panel green-accent" style="margin-top:1rem">
-    <div class="ptitle green">&#x1F4CB; لوحات أعادها النموذج</div>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.65rem">
-      <button type="button" class="tb-btn outline" onclick="checkLiveClearPlates()">&#x1F5D1; مسح القائمة</button>
-    </div>
-    <div id="checkLivePlateList"></div>
   </div>
 
   <div class="status" id="checkStatus"><div class="spin" id="checkSpin" style="display:none"></div><span id="checkStatusTxt"></span></div>
@@ -985,9 +1012,10 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <div><label class="lbl">كلمة المرور</label><input type="password" id="admNewPass" placeholder="password"/></div>
     </div>
     <div style="margin-top:.6rem"><label><input type="checkbox" id="admIsAdmin"/> إنشاء كـ Admin</label></div>
-    <div style="display:flex;gap:.6rem;margin-top:.8rem">
+    <div style="display:flex;gap:.6rem;margin-top:.8rem;flex-wrap:wrap">
       <button class="tb-btn primary" onclick="adminCreateUser()">إنشاء مستخدم</button>
       <button class="tb-btn outline" onclick="adminLoadUsers()">تحديث القائمة</button>
+      <a class="tb-btn outline" href="/admin/check-storage" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">&#x1F5C4; فرز Postgres</a>
     </div>
     <div id="adminMsg" style="margin-top:.6rem;font-family:var(--mono);font-size:.75rem;color:var(--dim2)"></div>
   </div>
@@ -1004,7 +1032,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 
 
 </div><!-- wrap -->
-<script src="/static/_om_field.js?v=vehiclecols1"></script>
+<script src="/static/_om_field.js?v=pgcheck10"></script>
 <script>
 const MAX_REC_SECS=300;
 // ── State ──────────────────────────────────────────────
@@ -1018,8 +1046,12 @@ let checkLargeFile=null;
 let checkDetected={large:null};
 let checkLiveWs=null,checkLiveMicOn=false,checkLiveAudioCtx=null,checkLiveScriptNode=null,checkLiveMediaStream=null;
 let checkLiveSilenceTimer=null,checkLiveLastVoiceAt=0;
+let checkLiveSfxCtx=null;
+let checkLiveLastHitNotifyKey='',checkLiveLastHitNotifyTs=0;
 const CHECK_LIVE_SILENCE_MS=650;
 const CHECK_LIVE_VOICE_RMS_THRESHOLD=0.012;
+const CHECK_LIVE_CLIENT_ID_KEY='checkLiveClientId_v1';
+let checkLiveHeartbeatTimer=null;
 let fcRecState='idle',fcMediaRec=null,fcAllChunks=[],fcCurChunks=[];
 let fcLiveBlob=null,fcAudioUrl=null;
 let fcGpsPoints=[],fcAutoTimer=null,fcRecTimer=null,fcRecSecs=0,fcGpsMode='auto';
@@ -1263,6 +1295,7 @@ function switchPage(p){
   });
   if(p==='gmaps') initGmapsPage();
   else stopGmapsUserLocationTracking();
+  if(p==='field' && typeof omFetchCheckCapabilities==='function') omFetchCheckCapabilities();
 }
 function showGmStatus(type,msg,spin=false){
   const box=document.getElementById('gmStatus');
@@ -2044,9 +2077,12 @@ async function sendAllQueued(){await sendAll();}
 // ── Excel table ───────────────────────────────────────
 function saveTable(){try{localStorage.setItem('plateTable_v5',JSON.stringify(tableRows));}catch(e){}}
 function loadTable(){try{const s=localStorage.getItem('plateTable_v5');if(s)tableRows=JSON.parse(s);}catch(e){tableRows=[];}}
+function streetLocForRow(row){
+  if(row && row.street_location!=null && String(row.street_location).trim()!=='') return String(row.street_location).trim();
+  return midGpsValue(row&&[row]||[]);
+}
 function renderTable(){
   const body=document.getElementById('excelBody');body.innerHTML='';
-  const streetLoc = midGpsValue(tableRows);
   tableRows.forEach((row,i)=>{
     const tr=document.createElement('tr');
     tr.innerHTML=
@@ -2057,7 +2093,7 @@ function renderTable(){
       +'<td class="td-edit td-locdetails" style="font-size:.78rem;color:var(--dim2)" contenteditable="true" onblur="editCell('+i+',\'location_details\',this.textContent)">'+esc(row.location_details||'')+'</td>'
       +'<td class="td-edit" contenteditable="true" onblur="editCell('+i+',\'vehicle_type\',this.textContent)">'+esc(row.vehicle_type||'')+'</td>'
       +'<td class="td-edit" contenteditable="true" onblur="editCell('+i+',\'recorder_name\',this.textContent)">'+esc(row.recorder_name||'')+'</td>'
-      +'<td class="td-gps">'+esc(streetLoc||'—')+'</td>'
+      +'<td class="td-gps">'+esc(streetLocForRow(row)||'—')+'</td>'
       +'<td><button class="del-row" onclick="deleteRow('+i+')">✕</button></td>';
     body.appendChild(tr);
   });
@@ -2065,7 +2101,7 @@ function renderTable(){
 }
 function editCell(idx,key,val){if(tableRows[idx])tableRows[idx][key]=val.trim();saveTable();}
 function deleteRow(idx){tableRows.splice(idx,1);saveTable();renderTable();}
-function addEmptyRow(){tableRows.push({full_plate:'',vehicle_type:'ملاكى',street_name:'',gps:'',location_details:'',recorder_name:'',recording_date:''});saveTable();renderTable();}
+function addEmptyRow(){tableRows.push({full_plate:'',vehicle_type:'ملاكى',street_name:'',gps:'',location_details:'',recorder_name:'',recording_date:'',street_location:''});saveTable();renderTable();}
 function clearTable(){if(!tableRows.length)return;if(confirm('هل تريد مسح كل الصفوف؟')){tableRows=[];saveTable();renderTable();}}
 
 function midGpsValue(rows){
@@ -2243,8 +2279,41 @@ function checkLiveFloatTo16(f32){
   }
   return b;
 }
+function checkLivePlayHitBeep(){
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(!Ctx) return;
+    if(!checkLiveSfxCtx||checkLiveSfxCtx.state==='closed') checkLiveSfxCtx=new Ctx();
+    const ctx=checkLiveSfxCtx;
+    if(ctx.state==='suspended') ctx.resume().catch(function(){});
+    const o=ctx.createOscillator();
+    const g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type='sine';
+    o.frequency.value=880;
+    const t0=ctx.currentTime;
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(0.11,t0+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+0.2);
+    o.start(t0);
+    o.stop(t0+0.22);
+  }catch(_e){}
+}
+function checkLiveNotifyPlateHit(plateStr){
+  const key=String(plateStr||'').replace(/\s+/g,' ').trim();
+  const now=Date.now();
+  if(key&&key===checkLiveLastHitNotifyKey&&(now-checkLiveLastHitNotifyTs)<650) return;
+  checkLiveLastHitNotifyKey=key;
+  checkLiveLastHitNotifyTs=now;
+  if(typeof navigator.vibrate==='function'){
+    try{ navigator.vibrate([65,40,75]); }catch(_v){}
+  }
+  checkLivePlayHitBeep();
+}
 function checkLiveAppendResultRow(data){
-  const list=document.getElementById('checkLivePlateList');
+  const hitCol=document.getElementById('checkLivePlateColHit');
+  const missCol=document.getElementById('checkLivePlateColMiss');
+  const list=data.found===true?hitCol:missCol;
   if(!list) return;
   const div=document.createElement('div');
   div.className='live-plate-item ';
@@ -2256,10 +2325,15 @@ function checkLiveAppendResultRow(data){
   if(data.needs_plate_column) extra+=' \u00B7 \u0627\u062E\u062A\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629';
   div.textContent=(data.plate||'\u2014')+extra;
   list.insertBefore(div,list.firstChild);
+  if(data.found===true) checkLiveNotifyPlateHit(data.plate||'');
 }
 function checkLiveClearPlates(){
-  const list=document.getElementById('checkLivePlateList');
-  if(list) list.innerHTML='';
+  const h=document.getElementById('checkLivePlateColHit');
+  const m=document.getElementById('checkLivePlateColMiss');
+  if(h) h.innerHTML='';
+  if(m) m.innerHTML='';
+  checkLiveLastHitNotifyKey='';
+  checkLiveLastHitNotifyTs=0;
 }
 function checkLiveOnMessage(ev){
   let j;
@@ -2288,14 +2362,6 @@ function checkLiveOnMessage(ev){
   }
   if(t==='plate_result'){
     checkLiveAppendResultRow(j.data||{});
-    const st=document.getElementById('chkManualState');
-    const d=j.data||{};
-    if(st){
-      if(d.found===true) st.textContent='\u2714 \u0645\u0648\u062C\u0648\u062F \u0641\u064A \u0627\u0644\u0645\u0644\u0641';
-      else if(d.found===false) st.textContent='\u2716 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F';
-      else if(d.needs_plate_column) st.textContent='\u0627\u062E\u062A\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629';
-      else if(!checkLargeFile) st.textContent='\u0627\u0631\u0641\u0639 Excel \u0623\u0648\u0644\u0627\u064B';
-    }
     return;
   }
   if(t==='error'){
@@ -2355,10 +2421,30 @@ function checkLiveStopMicOnly(){
 function checkLiveStopAll(){
   checkLiveStopMicOnly();
   checkLiveExcelReady=false;
+  if(checkLiveHeartbeatTimer){ clearInterval(checkLiveHeartbeatTimer); checkLiveHeartbeatTimer=null; }
   try{
     if(checkLiveWs){ checkLiveWs.close(); checkLiveWs=null; }
   }catch(e){}
   checkLiveSetWsUi(false,'\u063A\u064A\u0631 \u0645\u062A\u0635\u0644');
+}
+function getCheckLiveClientId(){
+  try{
+    let id=localStorage.getItem(CHECK_LIVE_CLIENT_ID_KEY)||'';
+    if(id) return id;
+    id='cl_'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+    localStorage.setItem(CHECK_LIVE_CLIENT_ID_KEY,id);
+    return id;
+  }catch(_){
+    return 'tmp_'+Date.now().toString(36);
+  }
+}
+function checkLiveStartHeartbeat(){
+  if(checkLiveHeartbeatTimer){ clearInterval(checkLiveHeartbeatTimer); checkLiveHeartbeatTimer=null; }
+  checkLiveHeartbeatTimer=setInterval(function(){
+    if(checkLiveWs&&checkLiveWs.readyState===1){
+      try{ checkLiveWs.send(JSON.stringify({type:'ping'})); }catch(_){}
+    }
+  },25000);
 }
 async function checkLiveEnsureSocket(){
   const tok=localStorage.getItem('access_token')||'';
@@ -2383,13 +2469,14 @@ async function checkLiveEnsureSocket(){
     wsUrl.protocol=location.protocol==='https:'?'wss:':'ws:';
     const ws=new WebSocket(wsUrl.toString());
     checkLiveWs=ws;
-    ws.onopen=function(){ ws.send(JSON.stringify({type:'init',api_key:apiKey})); };
+    ws.onopen=function(){ ws.send(JSON.stringify({type:'init',api_key:apiKey,client_id:getCheckLiveClientId()})); };
     ws.onerror=function(){
       showCheckStatus('err','\u062A\u0639\u0630\u0631 \u0627\u062A\u0635\u0627\u0644 WebSocket');
       checkLiveSetWsUi(false,'\u062E\u0637\u0623');
       done(false);
     };
     ws.onclose=function(){
+      if(checkLiveHeartbeatTimer){ clearInterval(checkLiveHeartbeatTimer); checkLiveHeartbeatTimer=null; }
       checkLiveSetWsUi(false,'\u0627\u0646\u0642\u0637\u0627\u0639');
       if(checkLiveMicOn) checkLiveStopMicOnly();
     };
@@ -2399,6 +2486,7 @@ async function checkLiveEnsureSocket(){
         const j=JSON.parse(ev.data);
         if(j.type==='ready'){
           checkLiveSetWsUi(true,'\u062C\u0627\u0647\u0632 \u2014 \u0627\u0633\u062A\u0645\u0639');
+          checkLiveStartHeartbeat();
           done(true);
         }
       }catch(e){}
@@ -2469,18 +2557,6 @@ async function checkLiveToggleMic(){
     checkLiveMicOn=false;
   }
 }
-function checkLiveManualLookup(){
-  const plate=document.getElementById('chkManualPlate').value.trim();
-  const st=document.getElementById('chkManualState');
-  if(!plate){ if(st) st.textContent='\u0627\u0643\u062A\u0628 \u0644\u0648\u062D\u0629'; return; }
-  if(!checkLiveWs || checkLiveWs.readyState!==1){
-    if(st) st.textContent='\u0627\u0628\u062F\u0623 \u0627\u0644\u0627\u0633\u062A\u0645\u0627\u0639 \u0623\u0648 \u0627\u0646\u062A\u0638\u0631 \u0627\u0644\u0627\u062A\u0635\u0627\u0644';
-    return;
-  }
-  checkLiveWs.send(JSON.stringify({type:'manual_lookup',plate:plate}));
-  if(st) st.textContent='\u062A\u0645 \u0627\u0644\u0637\u0644\u0628';
-}
-
 // ── Field check — GPS mode ─────────────────────────────
 function fcSetMode(m){
   fcGpsMode=m;
@@ -2898,7 +2974,6 @@ function fcResetRecUI(){
 
 function fcRenderExtracted(){
   const body=document.getElementById('fcExtractedBody');body.innerHTML='';
-  const streetLoc = midGpsValue(fcAllRows);
   fcAllRows.forEach((row,i)=>{
     const tr=document.createElement('tr');
     tr.innerHTML=
@@ -2909,7 +2984,7 @@ function fcRenderExtracted(){
       '<td class="td-locdetails" style="font-size:.78rem;color:var(--dim2)">'+esc(row.location_details||'')+'</td>'+
       '<td>'+esc(row.vehicle_type||'')+'</td>'+
       '<td>'+esc(row.recorder_name||'')+'</td>'+
-      '<td class="td-gps">'+esc(streetLoc||'—')+'</td>';
+      '<td class="td-gps">'+esc(streetLocForRow(row)||'—')+'</td>';
     body.appendChild(tr);
   });
   const cnt=fcAllRows.length+' لوحة';
@@ -2919,7 +2994,6 @@ function fcRenderExtracted(){
 
 function fcRenderMatched(){
   const body=document.getElementById('fcMatchedBody');body.innerHTML='';
-  const streetLoc = midGpsValue(fcMatchedRows);
   const originLatLngStr = fcLastMyLatLng;
   fcMatchedRows.forEach((row,i)=>{
     const tr=document.createElement('tr');
@@ -2937,7 +3011,7 @@ function fcRenderMatched(){
       '<td class="td-locdetails" style="font-size:.78rem;color:var(--dim2)">'+esc(row.location_details||'')+'</td>'+
       '<td>'+esc(row.vehicle_type||'')+'</td>'+
       '<td>'+esc(row.recorder_name||'')+'</td>'+
-      '<td class="td-gps">'+esc(streetLoc||'—')+'</td>';
+      '<td class="td-gps">'+esc(streetLocForRow(row)||'—')+'</td>';
     body.appendChild(tr);
   });
 }

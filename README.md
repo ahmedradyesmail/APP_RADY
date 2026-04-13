@@ -55,7 +55,9 @@ Export values from `.env` (or set directly in your shell). Example:
 
 ```bash
 export APP_NAME="Auth Backend"
-export SQLITE_DB_URL="sqlite:///./app.db"
+export DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME"
+# Optional fallback for local SQLite only when DATABASE_URL is empty:
+# export SQLITE_DB_URL="sqlite:///./app.db"
 export JWT_SECRET_KEY="super-secret-key"
 export JWT_ALGORITHM="HS256"
 export ACCESS_TOKEN_EXPIRE_MINUTES="30"
@@ -112,7 +114,8 @@ Use any provider that supports Python web services (for example Render, Railway,
 ### Required settings in cloud environment
 
 - `APP_NAME`
-- `SQLITE_DB_URL` (for SQLite file path)
+- `DATABASE_URL` (recommended primary DB in production)
+- `SQLITE_DB_URL` (optional local fallback only)
 - `JWT_SECRET_KEY` (must be strong in production)
 - `JWT_ALGORITHM`
 - `ACCESS_TOKEN_EXPIRE_MINUTES`
@@ -130,5 +133,7 @@ uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
 
 - SQLite is acceptable for small deployments and prototypes.
 - For serious production scale, migrate to PostgreSQL.
+- First startup on a fresh PostgreSQL instance uses an empty auth DB; `bootstrap_admin` recreates the admin from `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
+- Old users from legacy SQLite are not copied automatically; migrate them manually if you need to preserve existing accounts.
 - Keep `JWT_SECRET_KEY` private and rotate periodically.
 - Use HTTPS and secure API gateway/reverse proxy.

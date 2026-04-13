@@ -3,17 +3,27 @@
 from __future__ import annotations
 
 import io
+import itertools
+import json
 import logging
+import os
 import re
+import sqlite3
+import tempfile
 from datetime import datetime
 
 import openpyxl
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-from services.plate_utils import normalize_plate, auto_detect_plate_col
+from services.plate_utils import (
+    normalize_plate,
+    auto_detect_plate_col,
+    auto_detect_plate_col_from_row3,
+)
 from services.excel_utils import (
     load_workbook_maybe_encrypted,
     find_best_sheet,
-    apply_excel_style_matched_merge,
     workbook_to_bytes,
 )
 
@@ -66,6 +76,74 @@ def _norm_small_export_cols(requested: list[str], available: list[str]) -> list[
     return [c for c in requested if c in available]
 
 
+def _sqlite_connect(path: str) -> sqlite3.Connection:
+    con = sqlite3.connect(path)
+    con.execute("PRAGMA journal_mode=OFF")
+    con.execute("PRAGMA synchronous=OFF")
+    con.execute("PRAGMA temp_store=MEMORY")
+    con.execute("PRAGMA cache_size=-20000")
+    return con
+
+
+def _sqlite_init_index(con: sqlite3.Connection) -> None:
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS plate_idx ("
+        "plate_key TEXT NOT NULL, "
+        "payload_json TEXT NOT NULL)"
+    )
+    con.execute("CREATE INDEX IF NOT EXISTS idx_plate_key ON plate_idx(plate_key)")
+    con.commit()
+
+
+def _sqlite_insert_batch(
+    con: sqlite3.Connection, rows: list[tuple[str, str]]
+) -> None:
+    if not rows:
+        return
+    con.executemany(
+        "INSERT INTO plate_idx(plate_key, payload_json) VALUES(?,?)",
+        rows,
+    )
+    con.commit()
+
+
+def _make_border() -> Border:
+    thin = Side(style="thin", color="BFBFBF")
+    return Border(left=thin, right=thin, top=thin, bottom=thin)
+
+
+def _build_styled_row(
+    ws,
+    values: list,
+    col_sources: list[str],
+    header: bool,
+    header_font,
+    body_font,
+    header_fill_large,
+    header_fill_small,
+    body_fill_large,
+    body_fill_small,
+    align_header,
+    align_cell,
+    border,
+) -> None:
+    row_cells = []
+    for i, v in enumerate(values):
+        src = col_sources[i] if i < len(col_sources) else "large"
+        c = WriteOnlyCell(ws, value=v)
+        c.border = border
+        if header:
+            c.font = header_font
+            c.fill = header_fill_large if src == "large" else header_fill_small
+            c.alignment = align_header
+        else:
+            c.font = body_font
+            c.fill = body_fill_large if src == "large" else body_fill_small
+            c.alignment = align_cell
+        row_cells.append(c)
+    ws.append(row_cells)
+
+
 def run_check_plates_sync(
     lc_bytes: bytes,
     sc_bytes: bytes,
@@ -81,12 +159,11 @@ def run_check_plates_sync(
     Returns one of:
       {"kind": "xlsx", "content": bytes, "filename": str}
       {"kind": "json", "status_code": int, "body": dict}
-
-    Reads each sheet in a single streamed pass (no full ``list(sheet)`` copy)
-    to cut RAM on large workbooks; closes read_only workbooks when done.
     """
     large_wb = None
     small_wb = None
+    sqlite_con = None
+    sqlite_path = ""
     try:
         try:
             large_wb = load_workbook_maybe_encrypted(lc_bytes, password)
@@ -134,8 +211,16 @@ def run_check_plates_sync(
                 },
             }
 
+        le_cols = _norm_large_export_cols(list(large_export_cols or []), lh)
+        le_idx = [lh.index(c) for c in le_cols]
         lci = lh.index(lc)
-        lookup: dict = {}
+        tmp = tempfile.NamedTemporaryFile(prefix="check_idx_", suffix=".sqlite3", delete=False)
+        sqlite_path = tmp.name
+        tmp.close()
+        sqlite_con = _sqlite_connect(sqlite_path)
+        _sqlite_init_index(sqlite_con)
+        batch: list[tuple[str, str]] = []
+        batch_size = 2000
         for row in lrows:
             if all(v is None for v in row):
                 continue
@@ -143,8 +228,13 @@ def run_check_plates_sync(
             norm = normalize_plate(rp)
             if not norm:
                 continue
-            rd = {lh[i]: (row[i] if i < len(row) else None) for i in range(len(lh))}
-            lookup.setdefault(norm, []).append(rd)
+            out_vals = [(row[i] if i < len(row) else None) for i in le_idx]
+            batch.append((norm, json.dumps(out_vals, ensure_ascii=False)))
+            if len(batch) >= batch_size:
+                _sqlite_insert_batch(sqlite_con, batch)
+                batch.clear()
+        if batch:
+            _sqlite_insert_batch(sqlite_con, batch)
 
         srows = small_ws.iter_rows(values_only=True)
         header_s = next(srows, None)
@@ -152,7 +242,10 @@ def run_check_plates_sync(
             raise ValueError("الملف الصغير فارغ")
 
         sh = [str(h).strip() if h is not None else "" for h in header_s]
-        sc = small_col.strip() or auto_detect_plate_col(sh)
+        row2 = next(srows, None)
+        row3 = next(srows, None)
+        detected_small = auto_detect_plate_col(sh) or auto_detect_plate_col_from_row3(sh, row3)
+        sc = small_col.strip() or detected_small
 
         if not sc or sc not in sh:
             return {
@@ -165,72 +258,110 @@ def run_check_plates_sync(
                 },
             }
 
-        sci = sh.index(sc)
-        matched_pairs: list[tuple[dict, dict]] = []
-        mp: list = []
-        up: list = []
-
-        for row in srows:
-            if all(v is None for v in row):
-                continue
-            rp = row[sci] if sci < len(row) else None
-            norm = normalize_plate(rp)
-            if not norm:
-                continue
-            small_rd = {sh[i]: (row[i] if i < len(row) else None) for i in range(len(sh))}
-            if norm in lookup:
-                for large_rd in lookup[norm]:
-                    matched_pairs.append((large_rd, small_rd))
-                mp.append(str(rp or "").strip())
-            else:
-                up.append(str(rp or "").strip())
-
-        if not matched_pairs:
-            return {
-                "kind": "json",
-                "status_code": 200,
-                "body": {
-                    "detail": "لا توجد تطابقات بين الملفين",
-                    "matched": 0,
-                    "unmatched": len(up),
-                    "large_col_used": lc,
-                    "small_col_used": sc,
-                },
-            }
-
-        le_cols = _norm_large_export_cols(list(large_export_cols or []), lh)
         se_cols = _norm_small_export_cols(list(small_export_cols or []), sh)
+        se_idx = [sh.index(c) for c in se_cols]
+        sci = sh.index(sc)
+        matched_rows_count = 0
+        matched_plate_hits = 0
+        unmatched_plates = 0
 
         display_headers: list[str] = [
             _strip_small_word_from_header_title(c) for c in le_cols
         ] + [_strip_small_word_from_header_title(c) for c in se_cols]
         col_sources: list[str] = ["large"] * len(le_cols) + ["small"] * len(se_cols)
 
-        matched_rows: list[list] = []
-        for large_rd, small_rd in matched_pairs:
-            row_out: list = []
-            for c in le_cols:
-                v = large_rd.get(c, "")
-                row_out.append("" if v is None else v)
-            for c in se_cols:
-                v = small_rd.get(c, "")
-                row_out.append("" if v is None else v)
-            matched_rows.append(row_out)
+        header_font = Font(name="Arial", bold=True, color="FFFFFF", size=12)
+        body_font = Font(name="Arial", size=11, color="000000")
+        header_fill_large = PatternFill("solid", start_color="1E40AF")
+        header_fill_small = PatternFill("solid", start_color="166534")
+        body_fill_large = PatternFill("solid", start_color="DBEAFE")
+        body_fill_small = PatternFill("solid", start_color="DCFCE7")
+        align_header = Alignment(horizontal="center", vertical="center")
+        align_cell = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        border = _make_border()
 
-        wb_out = openpyxl.Workbook()
-        ws_m = wb_out.active
-        ws_m.title = "التطابقات"
-        apply_excel_style_matched_merge(ws_m, display_headers, matched_rows, col_sources)
+        wb_out = openpyxl.Workbook(write_only=True)
+        ws_m = wb_out.create_sheet(title="التطابقات")
+        ws_m.sheet_view.rightToLeft = True
+        _build_styled_row(
+            ws_m,
+            display_headers,
+            col_sources,
+            True,
+            header_font,
+            body_font,
+            header_fill_large,
+            header_fill_small,
+            body_fill_large,
+            body_fill_small,
+            align_header,
+            align_cell,
+            border,
+        )
+
+        preview_rows: list[list[str]] = []
+
+        for row in itertools.chain((r for r in (row2, row3) if r is not None), srows):
+            if all(v is None for v in row):
+                continue
+            rp = row[sci] if sci < len(row) else None
+            norm = normalize_plate(rp)
+            if not norm:
+                continue
+            small_vals = [(row[i] if i < len(row) else None) for i in se_idx]
+            large_candidates = []
+            cur = sqlite_con.execute(
+                "SELECT payload_json FROM plate_idx WHERE plate_key = ?",
+                (norm,),
+            )
+            for (payload_json,) in cur:
+                try:
+                    large_candidates.append(json.loads(payload_json))
+                except Exception:
+                    continue
+            if large_candidates:
+                matched_plate_hits += 1
+                for large_vals in large_candidates:
+                    row_out = [*large_vals, *small_vals]
+                    _build_styled_row(
+                        ws_m,
+                        row_out,
+                        col_sources,
+                        False,
+                        header_font,
+                        body_font,
+                        header_fill_large,
+                        header_fill_small,
+                        body_fill_large,
+                        body_fill_small,
+                        align_header,
+                        align_cell,
+                        border,
+                    )
+                    matched_rows_count += 1
+                    if len(preview_rows) < PREVIEW_MAX_ROWS:
+                        preview_rows.append(
+                            ["" if v is None else str(v).strip() for v in row_out]
+                        )
+            else:
+                unmatched_plates += 1
+
+        if not matched_rows_count:
+            return {
+                "kind": "json",
+                "status_code": 200,
+                "body": {
+                    "detail": "لا توجد تطابقات بين الملفين",
+                    "matched": 0,
+                    "unmatched": unmatched_plates,
+                    "large_col_used": lc,
+                    "small_col_used": sc,
+                },
+            }
 
         content = workbook_to_bytes(wb_out)
         ts = datetime.now().strftime("%Y%m%d_%H%M")
         filename = f"التطابقات_{ts}.xlsx"
-
-        preview_rows: list[list[str]] = []
-        for row_vals in matched_rows[:PREVIEW_MAX_ROWS]:
-            preview_rows.append(
-                ["" if v is None else str(v).strip() for v in row_vals]
-            )
 
         return {
             "kind": "xlsx",
@@ -240,15 +371,25 @@ def run_check_plates_sync(
                 "headers": display_headers,
                 "col_sources": col_sources,
                 "rows": preview_rows,
-                "total_rows": len(matched_rows),
-                "truncated": len(matched_rows) > PREVIEW_MAX_ROWS,
+                "total_rows": matched_rows_count,
+                "truncated": matched_rows_count > PREVIEW_MAX_ROWS,
                 "stats": {
-                    "matched_rows": len(matched_pairs),
-                    "matched_plate_hits": len(mp),
-                    "unmatched_plates": len(up),
+                    "matched_rows": matched_rows_count,
+                    "matched_plate_hits": matched_plate_hits,
+                    "unmatched_plates": unmatched_plates,
                 },
             },
         }
     finally:
+        try:
+            if sqlite_con is not None:
+                sqlite_con.close()
+        except Exception:
+            pass
+        if sqlite_path:
+            try:
+                os.unlink(sqlite_path)
+            except OSError:
+                logger.debug("Could not delete sqlite temp index: %s", sqlite_path)
         _close_wb(small_wb)
         _close_wb(large_wb)

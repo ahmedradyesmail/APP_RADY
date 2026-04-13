@@ -10,7 +10,11 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from urllib.parse import quote
 
 from dependencies.auth import get_current_user
-from services.plate_utils import normalize_plate, auto_detect_plate_col
+from services.plate_utils import (
+    normalize_plate,
+    auto_detect_plate_col,
+    auto_detect_plate_col_from_row3,
+)
 from services.excel_utils import (
     apply_excel_style,
     find_best_sheet_async,
@@ -242,7 +246,8 @@ async def check_gps_data(
         raise HTTPException(status_code=400, detail="الملف الصغير فارغ")
 
     sh = [str(h).strip() if h is not None else "" for h in sd[0]]
-    sc = small_col.strip() or auto_detect_plate_col(sh)
+    row3 = sd[2] if len(sd) > 2 else None
+    sc = small_col.strip() or auto_detect_plate_col(sh) or auto_detect_plate_col_from_row3(sh, row3)
 
     if not sc or sc not in sh:
         raise HTTPException(
