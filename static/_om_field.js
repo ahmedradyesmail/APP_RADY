@@ -222,6 +222,16 @@ document.addEventListener('DOMContentLoaded',async function(){
   }catch(_){}
   try{ await omEnsureTempCheckSession(); }catch(_){}
 });
+window.addEventListener('om-auth-state-changed',function(e){
+  var authed=!!(e && e.detail && e.detail.authenticated);
+  if(!authed){
+    omPostgresLargeEnabled=false;
+    omUseStoredLarge=false;
+    omHasStoredImports=false;
+    return;
+  }
+  omFetchCheckCapabilities();
+});
 function omColId(side){ return side==='large'?'omLargeCol':'omSmallCol'; }
 function omColBadgeId(side){ return side==='large'?'omLargeColBadge':'omSmallColBadge'; }
 function omShowFieldStatus(type,txt,spin=false){

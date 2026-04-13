@@ -3207,12 +3207,18 @@ function applyAdminNavVisibility(){
   function getAccess(){ return localStorage.getItem(ACCESS)||''; }
   function getRefresh(){ return localStorage.getItem(REFRESH)||''; }
   function setTokens(a,r){ localStorage.setItem(ACCESS,a); localStorage.setItem(REFRESH,r); }
+  function emitAuthStateChanged(authenticated){
+    try{
+      window.dispatchEvent(new CustomEvent('om-auth-state-changed',{detail:{authenticated:!!authenticated}}));
+    }catch(_){}
+  }
   function clearTokens(){
     localStorage.removeItem(ACCESS);
     localStorage.removeItem(REFRESH);
     try{ localStorage.removeItem('auth_is_admin'); }catch(_){}
     stopProactiveRefresh();
     if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
+    emitAuthStateChanged(false);
   }
   const TOKEN_REFRESH_MS=12*60*1000;
   let _proactiveTimer=null;
@@ -3240,6 +3246,7 @@ function applyAdminNavVisibility(){
         if(typeof j.is_admin==='boolean') localStorage.setItem('auth_is_admin', j.is_admin?'1':'0');
         if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
         startProactiveRefresh();
+        emitAuthStateChanged(true);
         return j.access_token;
       }finally{
         _refreshInFlight=null;
@@ -3328,6 +3335,7 @@ function applyAdminNavVisibility(){
       localStorage.setItem('auth_is_admin', j.is_admin===true?'1':'0');
       if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
       startProactiveRefresh();
+      emitAuthStateChanged(true);
       setMsg('تم تسجيل الدخول',true);
       showLock(false);
       try{ await runPostLoginPermissions(); }catch(_){}
