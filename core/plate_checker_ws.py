@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import re
 import traceback
 from datetime import datetime, timezone
@@ -31,6 +30,9 @@ from core.excel_loader import (
     plate_candidates_from_text,
     union_column_headers,
 )
+from services.check_temp_storage import temp_plate_exists_sync
+from services.gemini_catalog import is_gemini_model_allowed_sync
+from services.provider_keys import get_gemini_api_key_sync
 
 logger = logging.getLogger(__name__)
 
@@ -92,32 +94,58 @@ async def _send_error(
     )
 
 
+def _segment_for_current_turn_transcript(session: SessionState) -> str:
+    """Only the STT segment since the last model turnComplete (ignore prior turns)."""
+    full = (session.input_transcript or "").strip()
+    anchor = max(0, int(session.transcript_turn_anchor))
+    if anchor >= len(full):
+        return full
+    return full[anchor:].strip()
+
+
 async def _maybe_live_sheet_check(websocket: WebSocket, session: SessionState) -> None:
     """While user speaks: infer plate from STT and lookup in Excel (real-time)."""
-    if not session.excel_loaded or not (session.excel_plate_column or "").strip():
+    if (
+        not session.check_temp_enabled
+        and (not session.excel_loaded or not (session.excel_plate_column or "").strip())
+    ):
         return
-    t = (session.input_transcript or "").strip()
+    t = _segment_for_current_turn_transcript(session)
     if len(t) < 3:
         return
     cands = plate_candidates_from_text(t)
     if not cands:
         return
-    best = cands[0]
+    best = cands[-1]
     key = normalize_plate(best)
     if len(key) < 3:
         return
     if key == session.last_live_check_key:
         return
     session.last_live_check_key = key
-    found, row_data = lookup_plate(session.excel_plates, best)
-    safe_row = {
-        k: (str(v) if v is not None else None)
-        for k, v in row_data.items()
-        if not str(k).startswith("_")
-    }
+    if session.check_temp_enabled:
+        found = await asyncio.to_thread(
+            temp_plate_exists_sync,
+            session.check_temp_dsn,
+            session.user_id,
+            session.is_admin,
+            session_token=session.check_temp_session_token,
+            plate_text=best,
+        )
+        safe_row = {}
+    else:
+        found, row_data = lookup_plate(session.excel_plates, best)
+        safe_row = {
+            k: (str(v) if v is not None else None)
+            for k, v in row_data.items()
+            if not str(k).startswith("_")
+        }
     plate_show = format_plate_display(best) or best
-    matched = row_data.get("_matched_column", "") if found else ""
-    hit_sheet = row_data.get("_sheet", "") if found else ""
+    matched = (session.excel_plate_column or "") if (found and session.check_temp_enabled) else ""
+    hit_sheet = "postgres_temp" if (found and session.check_temp_enabled) else ""
+    if not session.check_temp_enabled:
+        matched = row_data.get("_matched_column", "") if found else ""
+        hit_sheet = row_data.get("_sheet", "") if found else ""
     await _send(
         websocket,
         {
@@ -198,15 +226,70 @@ def _parse_plate_payload(blob: str) -> list[Any]:
     return []
 
 
+def _sanitize_live_plate_text(plate: Any) -> str | None:
+    """
+    Enforce Live plate constraints:
+    - max 3 Arabic letters
+    - max 4 digits
+    - normalize common over-expanded letter names (e.g. عين/عن -> ع)
+    """
+    if plate is None:
+        return None
+    raw = str(plate).strip()
+    if not raw:
+        return None
+
+    t = raw
+    # Normalize common letter-name expansions to single letters.
+    t = re.sub(r"(?:\b|^)(عين|عاين|عن)(?:\b|$)", "ع", t)
+    t = re.sub(r"(?:\b|^)(غين|غاين)(?:\b|$)", "غ", t)
+    t = re.sub(r"(?:\b|^)(حاء|حا|حه)(?:\b|$)", "ح", t)
+    t = re.sub(r"(?:\b|^)(هاء|ها|هه)(?:\b|$)", "ه", t)
+
+    letters = "".join(re.findall(r"[\u0621-\u064A]", t))
+    digits = "".join(re.findall(r"\d", t))
+
+    if not letters or not digits:
+        return None
+    if len(letters) > 3 or len(digits) > 4:
+        return None
+
+    return f"{letters} {digits}"
+
+
 async def _emit_plate_result(
     websocket: WebSocket, session: SessionState, plate: Any
 ) -> None:
-    if plate is None or (isinstance(plate, str) and not plate.strip()):
+    normalized_plate = _sanitize_live_plate_text(plate)
+    if not normalized_plate:
         await _send(websocket, {"type": "no_plate", "data": {}})
         return
-    raw = str(plate).strip()
+    raw = normalized_plate
     plate_str = format_plate_display(raw) or raw
-    if session.excel_loaded:
+    if session.check_temp_enabled:
+        found = await asyncio.to_thread(
+            temp_plate_exists_sync,
+            session.check_temp_dsn,
+            session.user_id,
+            session.is_admin,
+            session_token=session.check_temp_session_token,
+            plate_text=raw,
+        )
+        await _send(
+            websocket,
+            {
+                "type": "plate_result",
+                "data": {
+                    "plate": plate_str,
+                    "found": bool(found),
+                    "details": {},
+                    "compare_column": session.excel_plate_column or "",
+                    "sheet": "postgres_temp",
+                    "index_count": 0,
+                },
+            },
+        )
+    elif session.excel_loaded:
         if not (session.excel_plate_column or "").strip():
             await _send(
                 websocket,
@@ -267,17 +350,15 @@ async def _emit_model_plate_if_new(
     websocket: WebSocket, session: SessionState, plate: Any
 ) -> bool:
     """Deduplicate partial/final model emissions for the same normalized plate(s) per turn."""
-    if plate is None:
+    normalized_plate = _sanitize_live_plate_text(plate)
+    if not normalized_plate:
         return False
-    raw = str(plate).strip()
-    if not raw:
-        return False
-    key = normalize_plate(raw)
+    key = normalize_plate(normalized_plate)
     if key and key in session.model_plate_norm_keys:
         return False
     if key:
         session.model_plate_norm_keys.add(key)
-    await _emit_plate_result(websocket, session, raw)
+    await _emit_plate_result(websocket, session, normalized_plate)
     return True
 
 
@@ -341,6 +422,7 @@ async def handle_client_messages(
                         session.excel_plate_column = ""
                         session.excel_active_sheet = ""
                         session.last_live_check_key = ""
+                        session.transcript_turn_anchor = 0
                         session.model_plate_norm_keys.clear()
                         columns_by_sheet = {n: sheets_map[n][1] for n in sheet_names}
                         await _send(
@@ -383,6 +465,7 @@ async def handle_client_messages(
                         session.excel_plates = merged
                         session.excel_plate_column = col
                         session.last_live_check_key = ""
+                        session.transcript_turn_anchor = 0
                         session.model_plate_norm_keys.clear()
                         await _send(
                             websocket,
@@ -429,6 +512,7 @@ async def handle_gemini_responses(websocket: WebSocket, session: SessionState) -
                     await _send(websocket, {"type": "interrupted", "data": {}})
                     session.text_buffer = ""
                     session.input_transcript = ""
+                    session.transcript_turn_anchor = 0
                     session.last_live_check_key = ""
                     session.model_plate_norm_keys.clear()
                     continue
@@ -436,7 +520,10 @@ async def handle_gemini_responses(websocket: WebSocket, session: SessionState) -
                 sc = msg.get("serverContent", {})
                 it = sc.get("inputTranscription") or {}
                 if isinstance(it, dict) and it.get("text"):
-                    session.input_transcript = it["text"]
+                    full_text = it["text"]
+                    session.input_transcript = full_text
+                    if session.transcript_turn_anchor > len(full_text):
+                        session.transcript_turn_anchor = 0
                     await _send(
                         websocket,
                         {
@@ -466,6 +553,10 @@ async def handle_gemini_responses(websocket: WebSocket, session: SessionState) -
                         await _process_plate_text(
                             websocket, session, session.text_buffer
                         )
+                    # Slice future STT at end of this turn so cumulative transcripts
+                    # cannot re-match a plate from a previous user utterance.
+                    session.transcript_turn_anchor = len(session.input_transcript or "")
+                    # Start next model turn from a clean slate.
                     session.text_buffer = ""
                     session.input_transcript = ""
                     session.last_live_check_key = ""
@@ -492,7 +583,7 @@ async def cleanup_session(session: Optional[SessionState], session_id: str) -> N
         logger.error("Cleanup error: %s", e)
 
 
-async def handle_plate_checker_client(websocket: WebSocket, user_id: int) -> None:
+async def handle_plate_checker_client(websocket: WebSocket, user_id: int, is_admin: bool = False) -> None:
     session_key = ""
     session: SessionState | None = None
     logger.info("New Live check connection user_id=%s", user_id)
@@ -503,7 +594,7 @@ async def handle_plate_checker_client(websocket: WebSocket, user_id: int) -> Non
         if init.get("type") != "init":
             await _send_error(
                 websocket,
-                "الرسالة الأولى يجب أن تكون init مع api_key",
+                "الرسالة الأولى يجب أن تكون init (مع client_id و live_model).",
                 "general",
             )
             if session:
@@ -523,14 +614,32 @@ async def handle_plate_checker_client(websocket: WebSocket, user_id: int) -> Non
         _cancel_cleanup_task(session_key)
         session = get_or_create_session(session_key)
         session.connected = True
+        session.user_id = int(user_id)
+        session.is_admin = bool(is_admin)
+        temp_session_token = (init.get("temp_session_token") or "").strip()
+        dsn_pg = (settings.check_postgres_dsn or "").strip()
+        session.check_temp_enabled = bool(temp_session_token and dsn_pg)
+        session.check_temp_session_token = temp_session_token if session.check_temp_enabled else ""
+        session.check_temp_dsn = dsn_pg if session.check_temp_enabled else ""
         touch_session(session_key)
-        api_key = (init.get("api_key") or "").strip() or os.getenv(
-            "GEMINI_API_KEY", ""
-        )
-        if not api_key:
+        live_model = (init.get("live_model") or "").strip()
+        if not live_model:
             await _send_error(
                 websocket,
-                "مفتاح Gemini غير موجود — أضفه في الإعدادات أو GEMINI_API_KEY",
+                "اختر موديل Live من القائمة أعلى الصفحة (مُدار من الخادم).",
+                "general",
+            )
+            session.connected = False
+            _live_cleanup_tasks[session_key] = asyncio.create_task(
+                _schedule_idle_cleanup(session_key)
+            )
+            return
+        if not await asyncio.to_thread(
+            is_gemini_model_allowed_sync, "live", live_model
+        ):
+            await _send_error(
+                websocket,
+                "موديل Live غير مسموح أو غير مفعّل.",
                 "general",
             )
             session.connected = False
@@ -555,33 +664,48 @@ async def handle_plate_checker_client(websocket: WebSocket, user_id: int) -> Non
         async with _live_sem:
             if session is None:
                 raise RuntimeError("Session not initialized")
-            async with create_gemini_session(api_key) as gemini_session:
-                session.genai_session = gemini_session
-                await _send(websocket, {"type": "ready"})
+            connected_live = False
+            api_key = get_gemini_api_key_sync()
+            if api_key:
+                try:
+                    async with create_gemini_session(
+                        api_key, live_model=live_model
+                    ) as gemini_session:
+                        session.genai_session = gemini_session
+                        await _send(websocket, {"type": "ready"})
+                        connected_live = True
 
-                client_task = asyncio.create_task(
-                    handle_client_messages(websocket, session, session_key)
-                )
-                gemini_task = asyncio.create_task(
-                    handle_gemini_responses(websocket, session)
-                )
+                        client_task = asyncio.create_task(
+                            handle_client_messages(websocket, session, session_key)
+                        )
+                        gemini_task = asyncio.create_task(
+                            handle_gemini_responses(websocket, session)
+                        )
 
-                done, pending = await asyncio.wait(
-                    [client_task, gemini_task],
-                    return_when=asyncio.FIRST_COMPLETED,
+                        done, pending = await asyncio.wait(
+                            [client_task, gemini_task],
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        for t in pending:
+                            t.cancel()
+                            try:
+                                await t
+                            except asyncio.CancelledError:
+                                pass
+                        for t in done:
+                            exc = t.exception()
+                            if exc is not None and not isinstance(
+                                exc, (WebSocketDisconnect, asyncio.CancelledError)
+                            ):
+                                logger.error("Live check task ended with error: %s", exc)
+                except Exception as e:
+                    logger.warning("Live Gemini connect/session failed: %s", e)
+            if not connected_live:
+                await _send_error(
+                    websocket,
+                    "خدمة التشيك المباشر غير متاحة مؤقتاً (503).",
+                    "general",
                 )
-                for t in pending:
-                    t.cancel()
-                    try:
-                        await t
-                    except asyncio.CancelledError:
-                        pass
-                for t in done:
-                    exc = t.exception()
-                    if exc is not None and not isinstance(
-                        exc, (WebSocketDisconnect, asyncio.CancelledError)
-                    ):
-                        logger.error("Live check task ended with error: %s", exc)
 
     except Exception as e:
         err = str(e)

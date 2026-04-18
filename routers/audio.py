@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from dependencies.auth import get_current_user
 from services.check_result_storage import job_id_valid
 from services.gemini import process_audio
+from services.gemini_catalog import is_gemini_model_allowed_sync
 from services.job_store import (
     TTL_PROCESSING_SEC,
     TTL_TERMINAL_SEC,
@@ -16,6 +17,7 @@ from services.job_store import (
     new_job_id,
     schedule_job_cleanup,
 )
+from services.provider_keys import get_gemini_api_key_sync
 from services.transcribe_result_storage import (
     schedule_transcribe_file_cleanup,
     transcribe_path_for_job,
@@ -41,7 +43,6 @@ async def _audio_job_task(
     job_id: str,
     file_content: bytes,
     filename: str,
-    api_key: str,
     model_name: str,
     recorder_name: str,
     sheet_name: str,
@@ -49,15 +50,42 @@ async def _audio_job_task(
 ) -> None:
     async with _audio_job_semaphore:
         try:
-            plates = await process_audio(
-                file_content=file_content,
-                filename=filename,
-                api_key=api_key,
-                model_name=model_name,
-                recorder_name=recorder_name,
-                sheet_name=sheet_name,
-                gps_points=gps_points,
-            )
+            api_key = get_gemini_api_key_sync()
+            if not api_key:
+                raise RuntimeError("no_gemini_key")
+            plates = None
+            model_err_detail: str | None = None
+            try:
+                plates = await process_audio(
+                    file_content=file_content,
+                    filename=filename,
+                    api_key=api_key,
+                    model_name=model_name,
+                    recorder_name=recorder_name,
+                    sheet_name=sheet_name,
+                    gps_points=gps_points,
+                )
+            except Exception as e:
+                err_text = str(e or "")
+                if (
+                    "404" in err_text
+                    and "not found" in err_text.lower()
+                    and "model" in err_text.lower()
+                ):
+                    model_err_detail = (
+                        "موديل REST المختار غير مدعوم/غير موجود على Gemini API. "
+                        "حدّث موديلات REST من صفحة Admin."
+                    )
+                    logger.warning("Gemini REST model error: %s", err_text[:400])
+                else:
+                    logger.exception("Gemini REST failed")
+                    raise RuntimeError("gemini_failed") from e
+
+            if plates is None:
+                if model_err_detail:
+                    raise RuntimeError(f"model_not_supported::{model_err_detail}")
+                raise RuntimeError("gemini_failed")
+
             payload = {"plates": plates, "total": len(plates)}
             try:
                 await asyncio.to_thread(write_transcribe_json_sync, job_id, payload)
@@ -86,14 +114,21 @@ async def _audio_job_task(
                     ttl_seconds=TTL_TERMINAL_SEC,
                 )
                 schedule_transcribe_file_cleanup(job_id, float(TTL_TERMINAL_SEC))
-        except Exception:
+        except Exception as e:
             logger.exception("Audio processing failed")
+            detail = "An internal error occurred. Please try again."
+            if str(e) == "no_gemini_key":
+                detail = "خدمة التفريغ غير متاحة مؤقتاً."
+            elif str(e) == "gemini_failed":
+                detail = "تعذّر التفريغ. تحقق من مفتاح Gemini في لوحة الأدمن أو أعد المحاولة لاحقاً."
+            elif str(e).startswith("model_not_supported::"):
+                detail = str(e).split("::", 1)[1] or "موديل REST غير مدعوم."
             await job_save(
                 job_id,
                 {
                     "status": "error",
                     "data": None,
-                    "detail": "An internal error occurred. Please try again.",
+                    "detail": detail,
                 },
                 ttl_seconds=TTL_TERMINAL_SEC,
             )
@@ -103,18 +138,26 @@ async def _audio_job_task(
 @router.post("/process")
 async def process(
     background_tasks: BackgroundTasks,
-    api_key: str = Form(...),
-    model_name: str = Form("gemini-2.5-flash"),
+    model_name: str = Form(...),
     recorder_name: str = Form(""),
     sheet_name: str = Form("بيانات المركبات"),
     gps_data: str = Form("[]"),
     audio: UploadFile = File(...),
 ):
-    api_key = api_key.strip()
-    model_name = model_name.strip() or "gemini-2.5-flash"
+    model_name = model_name.strip()
+    if not model_name:
+        raise HTTPException(status_code=400, detail="اختر موديل التفريغ (REST).")
 
-    if not api_key:
-        raise HTTPException(status_code=400, detail="أدخل مفتاح Gemini API")
+    if not await asyncio.to_thread(is_gemini_model_allowed_sync, "rest", model_name):
+        raise HTTPException(
+            status_code=400,
+            detail="موديل REST غير مسموح أو غير مفعّل — اختر من القائمة.",
+        )
+    if not get_gemini_api_key_sync():
+        raise HTTPException(
+            status_code=503,
+            detail="خدمة التفريغ غير متاحة — أضف مفتاح Gemini من لوحة الأدمن.",
+        )
 
     try:
         gps_points = json.loads(gps_data)
@@ -135,7 +178,6 @@ async def process(
         job_id,
         file_content,
         audio.filename or "audio.mp3",
-        api_key,
         model_name,
         recorder_name.strip(),
         sheet_name.strip(),

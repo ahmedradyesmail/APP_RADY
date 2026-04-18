@@ -28,6 +28,7 @@ from services.check_postgres import (
 from services.check_temp_storage import (
     CHECK_TEMP_MAX_LARGE_BYTES,
     CHECK_TEMP_TTL_MINUTES,
+    delete_temp_session_sync,
     ping_temp_session_sync,
     purge_expired_temp_sessions_sync,
     query_temp_plates_sync,
@@ -227,6 +228,31 @@ async def check_temp_session_ping(
     if not ok:
         raise HTTPException(status_code=404, detail="Temp session not found or expired.")
     return JSONResponse({"ok": True})
+
+
+@router.post("/check/temp/session/close")
+async def check_temp_session_close(
+    session_token: str = Form(""),
+    current_user: User = Depends(get_current_user),
+):
+    dsn = _check_pg_dsn()
+    if not dsn:
+        raise HTTPException(status_code=503, detail="CHECK_POSTGRES_URL is not configured.")
+    token = (session_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="session_token is required.")
+    try:
+        closed = await asyncio.to_thread(
+            delete_temp_session_sync,
+            dsn,
+            current_user.id,
+            current_user.is_admin,
+            token,
+        )
+    except Exception:
+        logger.exception("delete_temp_session_sync failed")
+        raise HTTPException(status_code=500, detail="Failed to close temp session.")
+    return JSONResponse({"ok": bool(closed)})
 
 
 @router.post("/check/temp/upload-large")

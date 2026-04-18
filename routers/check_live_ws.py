@@ -27,7 +27,7 @@ async def check_live_websocket(websocket: WebSocket) -> None:
         await websocket.close(code=4401, reason="invalid token")
         return
     try:
-        await handle_plate_checker_client(websocket, user.id)
+        await handle_plate_checker_client(websocket, user.id, bool(user.is_admin))
     except WebSocketDisconnect:
         logger.debug("Live check WS disconnect user_id=%s", user.id)
     except Exception:

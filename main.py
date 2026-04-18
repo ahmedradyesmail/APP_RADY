@@ -21,6 +21,9 @@ from routers.check_live_ws import router as check_live_ws_router
 from routers.gps import router as gps_router
 from routers.admin import router as admin_router
 from routers.admin_check_storage import router as admin_check_storage_router
+from routers.admin_provider import router as admin_provider_router
+from routers.public_config import router as public_config_router
+from routers.proxy_ors import router as proxy_ors_router
 from routers.auth import router as auth_router
 from services import gemini
 from services import job_store as job_store_svc
@@ -157,6 +160,9 @@ app.include_router(gps_router)
 
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(admin_provider_router)
+app.include_router(public_config_router)
+app.include_router(proxy_ors_router)
 app.include_router(admin_check_storage_router)
 
 

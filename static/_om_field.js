@@ -120,19 +120,23 @@ async function omFetchCheckCapabilities(){
   }catch(_e){ omPostgresLargeEnabled=false; }
 }
 
+function omClearLargeExcelFromClient(){
+  omClearPersistedCheckFile('large');
+  omCheckLargeFile=null;
+  var fn=document.getElementById('omLargeFname'); if(fn) fn.textContent='';
+  var rb=document.getElementById('omRemoveLargeBtn'); if(rb) rb.classList.remove('show');
+  var fi=document.getElementById('omLargeFileIn'); if(fi) fi.value='';
+  var lp=document.getElementById('omLargePw'); if(lp) lp.value='';
+  omResetColDropdown('large');
+  omSetBadge('large','pending','\u2014');
+  omClearCheckExportList('large');
+}
+
 function omOnToggleStoredLarge(){
   var c=document.getElementById('omUseStoredLargeCb');
   omUseStoredLarge=!!(c&&c.checked);
   if(omUseStoredLarge){
-    omClearPersistedCheckFile('large');
-    omCheckLargeFile=null;
-    var fn=document.getElementById('omLargeFname'); if(fn) fn.textContent='';
-    var rb=document.getElementById('omRemoveLargeBtn'); if(rb) rb.classList.remove('show');
-    var fi=document.getElementById('omLargeFileIn'); if(fi) fi.value='';
-    var lp=document.getElementById('omLargePw'); if(lp) lp.value='';
-    omResetColDropdown('large');
-    omSetBadge('large','pending','\u2014');
-    omClearCheckExportList('large');
+    omClearLargeExcelFromClient();
   }
   omResetCheckDetect();
   omDetectColForSide('large');
@@ -157,15 +161,20 @@ async function omImportLargeToServer(){
     var r=await fetch('/api/check/import-large',{method:'POST',body:fd});
     var j=await r.json().catch(function(){return{};});
     if(!r.ok) throw new Error(j.detail||r.statusText||'\u0641\u0634\u0644 \u0627\u0644\u0627\u0633\u062A\u064A\u0631\u0627\u062F');
-    if(hi) hi.textContent='\u2714 \u0627\u0633\u062A\u064A\u0631\u0627\u062F #'+String(j.import_id||'')+': '+String(j.row_count||0)+' \u0635\u0641\u060C \u0639\u0645\u0648\u062F '+String(j.large_col_used||'')+' \u2014 '+String(j.sheet_name||'');
+    var hintLine='\u2714 \u0627\u0633\u062A\u064A\u0631\u0627\u062F #'+String(j.import_id||'')+': '+String(j.row_count||0)+' \u0635\u0641\u060C \u0639\u0645\u0648\u062F '+String(j.large_col_used||'')+' \u2014 '+String(j.sheet_name||'');
+    if(j.sheet_selection_note) hintLine+=' \u2014 '+String(j.sheet_selection_note);
+    if(hi) hi.textContent=hintLine;
     omShowFieldStatus('ok','\u2705 \u062A\u0645 \u062D\u0641\u0638 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0643\u0628\u064A\u0631 \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645');
     var cb=document.getElementById('omUseStoredLargeCb');
-    if(cb && !cb.checked){
-      cb.checked=true;
-      omOnToggleStoredLarge();
-    }
+    if(cb && !cb.checked) cb.checked=true;
+    omUseStoredLarge=!!(cb&&cb.checked);
+    omClearLargeExcelFromClient();
+    omTempLargeReady=false;
+    omTempLargeFingerprint='';
+    omResetCheckDetect();
     await omRenderStoredImportsList();
     if(omUseStoredLarge) await omDetectColForSide('large');
+    omCheckRunReady();
   }catch(e){ omShowFieldStatus('err','\u062E\u0637\u0623: '+(e.message||'')); }
   finally{
     omImportLargeBusy=false;
@@ -425,7 +434,8 @@ function omVehicleExportContentAutoPick(header,samplesMap){
   return hits>=2 && (hits/Math.max(1,total))>=0.2;
 }
 function omRebuildCheckExportChoices(side,headers,defaultChecked,samplesMap){
-  const id=side==='large'?'omLargeExportList':'omSmallExportList';
+  if(side==='large') return;
+  const id='omSmallExportList';
   const el=document.getElementById(id);
   if(!el) return;
   el.innerHTML='';
@@ -452,6 +462,7 @@ function omRebuildCheckExportChoices(side,headers,defaultChecked,samplesMap){
   });
 }
 function omGetCheckExportColsJson(side){
+  if(side==='large') return '[]';
   const boxes=document.querySelectorAll('.check-export-cb.check-export-'+side+':checked');
   if(!boxes.length) return '[]';
   return JSON.stringify([...boxes].map(b=>b.value));
@@ -507,13 +518,11 @@ async function omDetectColForSide(side){
       if(!res.ok){ omSetBadge('large','notfound','\u26A0 '+(j.detail||res.statusText)); return; }
       if(!j.has_data||!j.headers||!j.headers.length){
         omSetBadge('large','notfound','\u0644\u0627 \u0628\u064A\u0627\u0646\u0627\u062A');
-        omRebuildCheckExportChoices('large',[],true);
         return;
       }
       omFillColDropdown('large',j.headers,document.getElementById('omLargeCol').value.trim());
       document.getElementById('omLargeCol').value='';
       omSetBadge('large','found','\u2714 \u0645\u062E\u0632\u0651\u0646 ('+String(j.row_count||0)+' \u0635\u0641)');
-      omRebuildCheckExportChoices('large',j.headers||[],true);
       omCheckLargeHasGps=!!(j.headers&&j.headers.indexOf('GPS')!==-1);
       const gs=document.getElementById('omGpsMatchSection');
       if(omCheckLargeHasGps){ gs.style.display=''; if(!document.getElementById('omGpsMyLat').value.trim())omRefreshCheckLoc(); }
@@ -739,12 +748,53 @@ function omCheckCellDisplayHtml(header,val){
   }
   return esc(raw);
 }
+function omAppendMatchExcelSheet(host,sec){
+  var block=document.createElement('div');
+  block.className='om-xls-sheet';
+  var bar=document.createElement('div');
+  bar.className='om-xls-titlebar';
+  bar.textContent=sec.title||'';
+  var sc=document.createElement('div');
+  sc.className='om-xls-scroll';
+  var tbl=document.createElement('table');
+  tbl.className='om-xls-grid';
+  var theadEl=document.createElement('thead');
+  var trh=document.createElement('tr');
+  var hdrs=sec.headers||[];
+  var srcs=sec.col_sources||[];
+  hdrs.forEach(function(h,i){
+    var th=document.createElement('th');
+    th.textContent=h==null?'':String(h);
+    if(srcs[i]==='small') th.className='om-xls-small';
+    trh.appendChild(th);
+  });
+  theadEl.appendChild(trh);
+  tbl.appendChild(theadEl);
+  var tb=document.createElement('tbody');
+  (sec.rows||[]).forEach(function(row){
+    var tr=document.createElement('tr');
+    row.forEach(function(cell,idx){
+      var td=document.createElement('td');
+      if(srcs[idx]==='small') td.className='om-xls-small';
+      td.innerHTML=omCheckCellDisplayHtml(hdrs[idx],cell);
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  sc.appendChild(tbl);
+  block.appendChild(bar);
+  block.appendChild(sc);
+  host.appendChild(block);
+}
 function omRenderCheckMatchPreview(preview){
-  const wrap=document.getElementById('omMatchTableWrap');
-  const thead=document.getElementById('omMatchThead');
-  const tbody=document.getElementById('omMatchTbody');
-  const note=document.getElementById('omMatchTruncNote');
+  var wrap=document.getElementById('omMatchTableWrap');
+  var host=document.getElementById('omMatchPreviewHost');
+  var thead=document.getElementById('omMatchThead');
+  var tbody=document.getElementById('omMatchTbody');
+  var note=document.getElementById('omMatchTruncNote');
   if(!wrap||!thead||!tbody) return;
+  if(host){ host.style.display='none'; host.innerHTML=''; }
   if(!preview||!preview.headers||!preview.headers.length){
     wrap.style.display='none';
     if(note){ note.style.display='none'; note.textContent=''; }
@@ -752,7 +802,53 @@ function omRenderCheckMatchPreview(preview){
     tbody.innerHTML='';
     return;
   }
-  const srcs=preview.col_sources||[];
+  var secs=preview.sections;
+  if(host&&(secs&&secs.length)){
+    wrap.style.display='none';
+    thead.innerHTML='';
+    tbody.innerHTML='';
+    host.className='om-match-preview-host';
+    host.style.display='flex';
+    secs.forEach(function(s){ omAppendMatchExcelSheet(host,s); });
+    if(note){
+      if(preview.truncated){
+        note.textContent='عرض أول '+preview.rows.length+' صف من أصل '+preview.total_rows+' — الملف الكامل عند الفتح في Excel.';
+        note.style.display='';
+      }else{
+        note.style.display='none';
+        note.textContent='';
+      }
+    }
+    return;
+  }
+  if(host&&(!secs||!secs.length)){
+    wrap.style.display='none';
+    thead.innerHTML='';
+    tbody.innerHTML='';
+    host.className='om-match-preview-host';
+    host.style.display='flex';
+    omAppendMatchExcelSheet(host,{
+      title:'معاينة التطابق',
+      headers:preview.headers,
+      col_sources:preview.col_sources||[],
+      rows:preview.rows||[]
+    });
+    if(note){
+      if(preview.truncated){
+        note.textContent='عرض أول '+preview.rows.length+' صف من أصل '+preview.total_rows+' — الملف الكامل عند الفتح في Excel.';
+        note.style.display='';
+      }else if(!preview.rows||!preview.rows.length){
+        note.textContent='لا توجد صفوف مطابقة في المعاينة — راجع الملف أو الأعمدة.';
+        note.style.display='';
+      }else{
+        note.style.display='none';
+        note.textContent='';
+      }
+    }
+    return;
+  }
+  if(host){ host.style.display='none'; host.innerHTML=''; }
+  var srcs=preview.col_sources||[];
   function thCls(i){ return srcs[i]==='small'?' class="om-match-col-small"':''; }
   if(!preview.rows||!preview.rows.length){
     thead.innerHTML='<tr>'+preview.headers.map(function(h,i){ return '<th'+thCls(i)+'>'+esc(h)+'</th>'; }).join('')+'</tr>';
@@ -764,9 +860,9 @@ function omRenderCheckMatchPreview(preview){
   thead.innerHTML='<tr>'+preview.headers.map(function(h,i){ return '<th'+thCls(i)+'>'+esc(h)+'</th>'; }).join('')+'</tr>';
   tbody.innerHTML='';
   preview.rows.forEach(function(row){
-    const tr=document.createElement('tr');
+    var tr=document.createElement('tr');
     row.forEach(function(cell,idx){
-      const td=document.createElement('td');
+      var td=document.createElement('td');
       td.className='td-gps'+(srcs[idx]==='small'?' om-match-col-small':'');
       td.innerHTML=omCheckCellDisplayHtml(preview.headers[idx],cell);
       tr.appendChild(td);
@@ -861,11 +957,10 @@ function omRefreshCheckLoc(){
 }
 function omSetCheckLocDot(state,txt){const d=document.getElementById('omGpsLocDot');d.className='dot'+(state==='on'?' on':state==='err'?' err':'');document.getElementById('omGpsLocTxt').textContent=txt;}
 async function omRunGpsNearestAfterMatch(){
-  const orsKey=getOrsKey().trim();
   const myLat=document.getElementById('omGpsMyLat').value.trim();
   const myLon=document.getElementById('omGpsMyLon').value.trim();
-  if(!orsKey||!myLat||!myLon){
-    omShowFieldStatus('ok','\u2705 \u062A\u0645\u062A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2014 \u0644\u0645 \u064A\u064F\u062D\u0633\u0628 \u0623\u0642\u0631\u0628 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A (\u0623\u0636\u0641 \u0645\u0641\u062A\u0627\u062D ORS \u0645\u0646 \u2699 \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0648\u062D\u062F\u062F \u0645\u0648\u0642\u0639\u0643).');
+  if(!myLat||!myLon){
+    omShowFieldStatus('ok','\u2705 \u062A\u0645\u062A \u0627\u0644\u0645\u0637\u0627\u0628\u0642\u0629 \u2014 \u0644\u0645 \u064A\u064F\u062D\u0633\u0628 \u0623\u0642\u0631\u0628 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A (\u062D\u062F\u062F \u0645\u0648\u0642\u0639\u0643 \u0623\u0648\u0644\u0627\u064B).');
     return;
   }
   document.getElementById('omGpsProgress').style.display='';
@@ -877,7 +972,7 @@ async function omRunGpsNearestAfterMatch(){
     const fd=new FormData();
     let res;
     if(omPostgresLargeEnabled && omUseStoredLarge){
-      if(usingSmallText){
+      if(omUsingSmallText()){
       fd.append('small_plates_text',document.getElementById('omSmallPlatesText').value||'');
     }else{
       fd.append('small_file',omCheckSmallFile);
@@ -905,7 +1000,7 @@ async function omRunGpsNearestAfterMatch(){
     omGpsReset();
     return;
   }
-  const ORS='https://api.openrouteservice.org/v2/directions/driving-car';
+  const ORS_PROXY='/api/proxy/ors/directions';
   const results=[],failed=[];let quotaExceeded=false;
   for(let i=0;i<vehicles.length&&!quotaExceeded;i++){
     const v=vehicles[i];
@@ -919,9 +1014,9 @@ async function omRunGpsNearestAfterMatch(){
     let routed=false;
     for(let att=0;att<=2&&!routed;att++){
       try{
-        const r=await fetch(ORS,{method:'POST',headers:{'Authorization':orsKey,'Content-Type':'application/json'},body:JSON.stringify({coordinates:[[parseFloat(myLon),parseFloat(myLat)],[vLon,vLat]],units:'km'})});
-        const rd=await r.json();
-        if(r.status===429){omShowFieldStatus('warn','\u2705 Excel \u062C\u0627\u0647\u0632. GPS: \u062A\u062C\u0627\u0648\u0632\u062A \u062D\u062F ORS');quotaExceeded=true;break;}
+        const r=await fetch(ORS_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({coordinates:[[parseFloat(myLon),parseFloat(myLat)],[vLon,vLat]],units:'km'})});
+        const rd=await r.json().catch(function(){return{};});
+        if(r.status===429||r.status===503){omShowFieldStatus('warn','\u2705 Excel \u062C\u0627\u0647\u0632. GPS: \u062A\u0639\u0630\u0631 \u062E\u062F\u0645\u0629 ORS \u0623\u0648 \u062D\u062F \u0627\u0644\u0645\u0639\u0627\u0644\u062C\u0629');quotaExceeded=true;break;}
         if(r.ok&&rd.routes?.length){const s=rd.routes[0].summary;results.push({...v,distance_km:+s.distance.toFixed(2),duration_min:+(s.duration/60).toFixed(1)});routed=true;}
         else{if(att<2)await new Promise(r=>setTimeout(r,3000));else failed.push({...v,reason:rd?.error?.message||'\u0644\u0627 \u064A\u0648\u062C\u062F \u0645\u0633\u0627\u0631'});}
       }catch(e2){if(att<2)await new Promise(r=>setTimeout(r,3000));else failed.push({...v,reason:e2.message});}

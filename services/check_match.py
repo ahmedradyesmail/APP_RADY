@@ -11,6 +11,7 @@ import re
 import sqlite3
 import tempfile
 from datetime import datetime
+from typing import Any
 
 import openpyxl
 from openpyxl.cell import WriteOnlyCell
@@ -300,6 +301,14 @@ def run_check_plates_sync(
         )
 
         preview_rows: list[list[str]] = []
+        preview_sections: list[dict[str, Any]] = [
+            {
+                "title": f"الملف الكبير — ورقة: {large_ws.title}",
+                "headers": list(display_headers),
+                "col_sources": list(col_sources),
+                "rows": [],
+            }
+        ]
 
         for row in itertools.chain((r for r in (row2, row3) if r is not None), srows):
             if all(v is None for v in row):
@@ -340,9 +349,9 @@ def run_check_plates_sync(
                     )
                     matched_rows_count += 1
                     if len(preview_rows) < PREVIEW_MAX_ROWS:
-                        preview_rows.append(
-                            ["" if v is None else str(v).strip() for v in row_out]
-                        )
+                        pr = ["" if v is None else str(v).strip() for v in row_out]
+                        preview_rows.append(pr)
+                        preview_sections[0]["rows"].append(pr)
             else:
                 unmatched_plates += 1
 
@@ -371,6 +380,7 @@ def run_check_plates_sync(
                 "headers": display_headers,
                 "col_sources": col_sources,
                 "rows": preview_rows,
+                "sections": preview_sections,
                 "total_rows": matched_rows_count,
                 "truncated": matched_rows_count > PREVIEW_MAX_ROWS,
                 "stats": {

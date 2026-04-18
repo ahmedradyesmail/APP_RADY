@@ -20,6 +20,13 @@ class SessionState:
     model_plate_norm_keys: set[str] = field(default_factory=set)
     text_buffer: str = ""
     input_transcript: str = ""
+    # Index into cumulative inputTranscription: only suffix after this is used for live plate regex.
+    transcript_turn_anchor: int = 0
+    check_temp_enabled: bool = False
+    check_temp_session_token: str = ""
+    check_temp_dsn: str = ""
+    user_id: int = 0
+    is_admin: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_activity_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     connected: bool = False

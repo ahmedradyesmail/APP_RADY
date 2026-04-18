@@ -75,7 +75,7 @@ header p{font-size:.74rem;color:var(--dim2);font-family:var(--mono);margin-top:.
 .ptitle{font-size:.68rem;font-family:var(--mono);color:var(--sky);text-transform:uppercase;letter-spacing:.13em;margin-bottom:1.1rem;display:flex;align-items:center;gap:.5rem}
 .ptitle.violet{color:var(--violet)}.ptitle.teal{color:var(--teal)}.ptitle.green{color:var(--green)}
 .ptitle::after{content:"";flex:1;height:1px;background:var(--brd)}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:.9rem}
+.row2{display:grid;grid-template-columns:repeat(3,1fr);gap:.9rem}
 @media(max-width:620px){.row2{grid-template-columns:1fr}}
 label.lbl{display:block;font-size:.67rem;font-family:var(--mono);color:var(--dim2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.3rem}
 input[type=text],input[type=number],input[type=password],select{width:100%;background:var(--s2);border:1px solid var(--brd2);border-radius:7px;padding:.6rem .85rem;color:var(--text);font-family:var(--mono);font-size:.85rem;outline:none;transition:all .2s}
@@ -262,7 +262,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .check-run-btn:disabled{opacity:.28;cursor:not-allowed}
 .check-result-box{background:var(--s1);border:1px solid rgba(139,92,246,.3);border-radius:var(--r);padding:1.4rem;margin-bottom:1rem;box-shadow:var(--card-shadow);display:none}
 .check-result-box.show{display:block}
-.result-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-bottom:1rem}
+.result-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin-bottom:1rem;direction:rtl}
 @media(max-width:500px){.result-stats{grid-template-columns:1fr 1fr}}
 .stat-card{background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:.85rem;text-align:center}
 .stat-n{font-family:var(--mono);font-size:1.6rem;font-weight:700}
@@ -299,6 +299,26 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .check-export-hint{font-size:.68rem;color:var(--dim2);margin-top:.35rem;line-height:1.5}
 #omMatchTableWrap th.om-match-col-small,#omMatchTableWrap td.om-match-col-small{background:rgba(34,197,94,.1);box-shadow:inset 3px 0 0 #16a34a}
 #omMatchTableWrap th.om-match-col-small{color:#166534;font-weight:800}
+#omMatchPreviewHost.om-match-preview-host{display:flex;flex-direction:column;gap:1.05rem;margin-bottom:1rem;direction:rtl}
+.om-xls-sheet{border:1px solid #b0b0b0;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.07),0 0 0 1px rgba(255,255,255,.8) inset}
+.om-xls-titlebar{background:linear-gradient(180deg,#ebebeb 0%,#d9d9d9 55%,#d0d0d0 100%);color:#1f1f1f;font-family:Segoe UI,Calibri,Tahoma,sans-serif;font-size:.76rem;font-weight:700;padding:.58rem 1rem;line-height:1.45;text-align:right;border-bottom:1px solid #a8a8a8;letter-spacing:.01em}
+.om-xls-scroll{max-height:min(56vh,440px);overflow:auto;background:#fcfcfc;direction:rtl;border-top:1px solid #c5c5c5}
+.om-xls-grid{width:100%;border-collapse:collapse;table-layout:auto;font-family:Segoe UI,Calibri,var(--mono);font-size:.75rem;background:#fff}
+.om-xls-grid thead th{position:sticky;top:0;z-index:2;background:#f0f0f0;border:1px solid #c6c6c6;padding:.45rem .55rem;text-align:center;font-weight:700;color:#222;white-space:nowrap;box-shadow:inset 0 -1px 0 #b8b8b8}
+.om-xls-grid tbody td{border:1px solid #c6c6c6;padding:.42rem .55rem;text-align:center;vertical-align:middle;color:#1a1a1a;background:#fff;font-family:Segoe UI,Calibri,var(--ar)}
+.om-xls-grid tbody tr:nth-child(even) td{background:#f7f7f7}
+.om-xls-grid td.om-xls-small,.om-xls-grid th.om-xls-small{background:#edf7ed!important;border-color:#9ccc9c!important;color:#14532d!important;font-weight:700}
+/* Tafrigh data table: same Excel-like shell as الفرز preview; fixed scroll height */
+.tafrigh-xls-scroll{height:min(52vh,460px);max-height:460px;min-height:240px;overflow:auto;background:#fcfcfc;direction:rtl;border-top:1px solid #c5c5c5}
+.tafrigh-xls-scroll .om-xls-grid thead th{text-transform:none;letter-spacing:.02em;font-family:var(--ar),Segoe UI,sans-serif}
+.tafrigh-xls-scroll .td-plate{color:#14532d;font-weight:800}
+.tafrigh-xls-scroll .td-gps{color:#333;font-family:var(--mono),Consolas,monospace;font-size:.72rem;text-align:left;direction:ltr}
+.tafrigh-xls-scroll .td-edit,.tafrigh-xls-scroll .td-locdetails{color:#1a1a1a}
+.tafrigh-xls-scroll .td-edit:focus{background:#fff9c4;outline:none;box-shadow:inset 0 0 0 1px #e4d00a}
+.tafrigh-xls-scroll .td-locdetails{color:#444!important}
+.tafrigh-xls-scroll .del-row{color:#555}
+.tafrigh-xls-scroll .del-row:hover{color:#b91c1c}
+.tafrigh-xls-scroll tbody tr:hover td{background:#edf3fa!important}
 .check-run-btn{width:100%;padding:.95rem;background:linear-gradient(135deg,var(--violet),#6d28d9,#5b21b6);border:none;border-radius:10px;color:#fff;font-family:var(--ar);font-size:1rem;font-weight:800;cursor:pointer;transition:all .22s;display:flex;align-items:center;justify-content:center;gap:.55rem;box-shadow:0 4px 20px rgba(139,92,246,.4)}
 .check-run-btn:hover:not(:disabled){opacity:.9;transform:translateY(-2px)}
 .check-run-btn:disabled{opacity:.28;cursor:not-allowed}
@@ -390,71 +410,10 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   <div class="modal" style="max-width:500px">
     <button class="modal-close" onclick="closeSettings()">&#x2715;</button>
     <h2>&#x2699;&#xFE0F; الإعدادات</h2>
-
-    <!-- Gemini API Key -->
-    <div style="background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:1rem;margin-bottom:.9rem">
-      <label class="lbl" style="margin-bottom:.5rem">&#x1F511; مفتاح Gemini API</label>
-      <div class="api-row">
-        <input type="password" id="sApiKey" placeholder="AIzaSy&#x2026;" style="flex:1" oninput="sUpdateSaveState()"/>
-        <button class="eye-btn" id="sApiEyeBtn" onclick="toggleSEye('sApiKey','sApiEyeBtn')">&#x1F441;</button>
-      </div>
+    <div style="background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:1rem;margin-bottom:1rem;font-size:.82rem;line-height:1.65;color:var(--dim2)">
+      <p style="margin:0 0 .6rem">مفاتيح <strong>Gemini / ORS / Maps</strong> تُخزَّن على الخادم في <strong>Redis</strong> (أو عبر متغيرات البيئة) — لا يُخزَّن مفتاح في المتصفح. قوائم <strong>موديلات Gemini</strong> تُضاف من لوحة Admin.</p>
+      <p style="margin:0">للمستخدمين العاديين يُستخدم تلقائياً أول موديل REST وLive مفعّل من الخادم. اختيار الموديل من القائمة المنسدلة متاح في صفحة Admin فقط.</p>
     </div>
-
-    <!-- Model Selection -->
-    <div style="background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:1rem;margin-bottom:.9rem">
-      <label class="lbl" style="margin-bottom:.65rem">&#x1F916; النموذج</label>
-      <div style="display:flex;gap:.4rem;margin-bottom:.7rem">
-        <button id="smtab1" onclick="selectMTab(1)"
-          style="flex:1;padding:.5rem;border-radius:6px;font-family:var(--ar);font-size:.78rem;cursor:pointer;transition:all .18s;border:1px solid var(--brd2);background:transparent;color:var(--dim2)">
-          الوضع 1
-        </button>
-        <button id="smtab2" onclick="selectMTab(2)"
-          style="flex:1;padding:.5rem;border-radius:6px;font-family:var(--ar);font-size:.78rem;cursor:pointer;transition:all .18s;border:1px solid var(--brd2);background:transparent;color:var(--dim2)">
-          الوضع 2
-        </button>
-        <button id="smtab3" onclick="selectMTab(3)"
-          style="flex:1;padding:.5rem;border-radius:6px;font-family:var(--ar);font-size:.78rem;cursor:pointer;transition:all .18s;border:1px solid var(--brd2);background:transparent;color:var(--dim2)">
-          يدوي
-        </button>
-        <button id="smtab4" onclick="selectMTab(4)"
-          style="flex:1;padding:.5rem;border-radius:6px;font-family:var(--ar);font-size:.72rem;cursor:pointer;transition:all .18s;border:1px solid var(--brd2);background:transparent;color:var(--dim2)">
-          Live
-        </button>
-      </div>
-      <div id="sModelManualWrap" style="display:none;margin-bottom:.4rem">
-        <input type="text" id="sModelManual" placeholder="مثال: gemini-2.5-pro" oninput="sUpdateSaveState()"/>
-      </div>
-      <div id="sModelInfo" style="font-size:.7rem;color:var(--dim2);font-family:var(--mono);min-height:1.1em"></div>
-    </div>
-
-    <!-- ORS API Key -->
-    <div style="background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:1rem;margin-bottom:1.2rem">
-      <label class="lbl" style="margin-bottom:.4rem">&#x1F5FA; مفتاح ORS API &mdash;
-        <a href="https://account.heigit.org/manage/key" target="_blank"
-           style="color:var(--teal);font-weight:400;text-transform:none;letter-spacing:0;font-size:.65rem;text-decoration:none;border-bottom:1px solid rgba(20,184,166,.3)">
-          account.heigit.org
-        </a>
-      </label>
-      <div class="api-row">
-        <input type="password" id="sOrsKey" placeholder="أدخل مفتاح ORS …" style="flex:1" oninput="sUpdateSaveState()"/>
-        <button class="eye-btn" id="sOrsEyeBtn" onclick="toggleSEye('sOrsKey','sOrsEyeBtn')">&#x1F441;</button>
-      </div>
-    </div>
-
-    <!-- Google Maps API Key -->
-    <div style="background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:1rem;margin-bottom:1.2rem">
-      <label class="lbl" style="margin-bottom:.4rem">&#x1F5FA;&#xFE0F; مفتاح Google Maps API</label>
-      <div class="api-row">
-        <input type="password" id="sGoogleMapsKey" placeholder="AIzaSy..." style="flex:1" oninput="sUpdateSaveState()"/>
-        <button class="eye-btn" id="sGoogleMapsEyeBtn" onclick="toggleSEye('sGoogleMapsKey','sGoogleMapsEyeBtn')">&#x1F441;</button>
-      </div>
-      <div style="font-size:.68rem;color:var(--dim2);margin-top:.45rem">يُحفظ محلياً (localStorage) لاستخدام صفحة Google Maps.</div>
-    </div>
-
-    <button onclick="saveSettings()"
-      style="width:100%;padding:.8rem;background:linear-gradient(135deg,var(--teal),#0d9488);border:none;border-radius:9px;color:#fff;font-family:var(--ar);font-size:.9rem;font-weight:800;cursor:pointer;box-shadow:0 3px 12px rgba(20,184,166,.3);transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.5rem">
-      &#x2714; حفظ
-    </button>
 
     <div class="settings-logout-wrap">
       <p style="font-size:.76rem;color:var(--dim2);margin-bottom:.6rem">تسجيل الخروج يمسح جلسة الدخول ويعيدك لشاشة تسجيل الدخول (لا يُغلق خادم التطبيق على الجهاز).</p>
@@ -469,15 +428,14 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <button class="modal-close" onclick="closeInstr()">&#x2715;</button>
     <h2>&#x1F4D6; تعليمات الاستخدام</h2>
     <div id="instrContent">
-      <p><strong>الإعدادات العامة (أعلى الصفحة):</strong> مفتاح API والنموذج مشتركان بين جميع الصفحات.</p>
-      <p>الوضع 1 = gemini-2.5-pro (سريع، مجاني) &nbsp;|&nbsp; الوضع 2 = gemini-2.5-flash (متوازن، مجاني) &nbsp;|&nbsp; الوضع 3 = gemini-1.5-flash (احتياطي، مجاني)</p>
+      <p><strong>المفاتيح:</strong> Redis أو البيئة على الخادم. <strong>الموديلات:</strong> تُضاف من لوحة Admin. للمستخدم العادي يُختار أول موديل مفعّل تلقائياً.</p>
       <p><strong>1. التفريغ:</strong> سجّل صوتاً بأرقام اللوحات، أضفه للقائمة وأرسله للنموذج. البيانات تُحفظ تلقائياً.</p>
       <p><strong>2. الفرز:</strong></p>
       <ul>
         <li>ارفع الملف الكبير والملف الصغير (Excel)، ويُكتشف عمود اللوحة تلقائياً لكليهما.</li>
-        <li>اضغط Match لتصدير ملف التطابق؛ إن وُجد عمود GPS في الملف الكبير يمكن ترتيب أقرب المركبات بعد المطابقة (مفتاح ORS في الإعدادات).</li>
+        <li>اضغط Match لتصدير ملف التطابق؛ إن وُجد عمود GPS في الملف الكبير يمكن ترتيب أقرب المركبات بعد المطابقة (مفتاح ORS من الخادم).</li>
       </ul>
-      <p><strong>3. التشيك (Gemini Live):</strong> ارفع ملف Excel مرجعي واحد، يُكتشف عمود اللوحة تلقائياً، ثم استمع مباشرة أو أدخل لوحة يدوياً. يُستخدم نفس مفتاح Gemini من الإعدادات.</p>
+      <p><strong>3. التشيك (Gemini Live):</strong> ارفع ملف Excel مرجعي واحد، يُكتشف عمود اللوحة تلقائياً، ثم استمع مباشرة أو أدخل لوحة يدوياً. المفتاح والموديل من الخادم.</p>
       <div style="margin:.55rem 0 0;padding:.65rem .85rem;background:var(--s2);border:1px solid var(--brd2);border-radius:8px;font-size:.82rem;line-height:1.65;color:var(--dim2)">
         <strong style="color:var(--text)">لو اتقطع الاتصال فوراً أو ظهر 403 في السيرفر:</strong>
         المتصفح يجب أن يتصل بمسار ثابت <span style="font-family:var(--mono)">/ws/check-live</span> على نفس المضيف (مثلاً <span style="font-family:var(--mono)">ws://127.0.0.1:8000/ws/check-live</span>). مسار مثل <span style="font-family:var(--mono)">/ws//127.0.0.1:8000/…</span> خطأ ويُرفض قبل التوثيق.
@@ -520,7 +478,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   <div class="ptitle">&#x2699;&#xFE0F; إعدادات التفريغ</div>
   <div class="row2">
     <div><label class="lbl">اسم المسجّل</label><input type="text" id="recorderName" placeholder="أدخل اسمك"/></div>
-    <div><label class="lbl">اسم ورقة Excel</label><input type="text" id="sheetName" value="بيانات المركبات"/></div>
+    <div><label class="lbl">الحي</label><input type="text" id="districtName" placeholder="اختياري — يُصدَّر لكل الصفوف"/></div>
+    <div><label class="lbl">اسم ورقة Excel</label><input type="text" id="sheetName" value="بيانات المركبات" oninput="syncTafrighSheetTitle()"/></div>
   </div>
 </div>
 <div class="tabs">
@@ -673,11 +632,14 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <button class="tb-btn danger"  onclick="clearTable()">&#x1F5D1; مسح الكل</button>
     <span class="row-count" id="rowCount">0 صف</span>
   </div>
-  <div class="tbl-outer">
-    <table>
-      <thead><tr><th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الشارع</th><th>تفاصيل الموقع</th><th>نوع المركبة</th><th>اسم المسجّل</th><th>موقع الشارع</th><th></th></tr></thead>
-      <tbody id="excelBody"></tbody>
-    </table>
+  <div class="om-xls-sheet" id="tafrighXlsSheet">
+    <div class="om-xls-titlebar" id="tafrighSheetTitlebar">بيانات المركبات</div>
+    <div class="om-xls-scroll tafrigh-xls-scroll">
+      <table class="om-xls-grid" id="tafrighDataTable">
+        <thead><tr><th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الحي</th><th>الشارع</th><th>تفاصيل الموقع</th><th>نوع المركبة</th><th>اسم المسجّل</th><th>موقع الشارع</th><th></th></tr></thead>
+        <tbody id="excelBody"></tbody>
+      </table>
+    </div>
   </div>
   <p style="margin-top:.6rem;font-size:.72rem;color:var(--dim2);font-family:var(--mono)">&#x1F4A1; اضغط على أي خلية للتعديل &mdash; يُحفظ تلقائياً</p>
 </div>
@@ -692,7 +654,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   </div>
   <div id="omPgStoragePanel" class="panel violet-accent" style="display:none;margin-bottom:1rem">
     <div class="ptitle violet">&#x1F5C4; تخزين الملف الكبير على الخادم (Postgres)</div>
-    <p style="font-size:.74rem;color:var(--dim2);line-height:1.65">يمكنك استيراد <strong>عدة ملفات كبيرة</strong>؛ كل ملف <strong>ورقة عمل واحدة</strong> وبحد أقصى <strong>15MB</strong> لكل ملف. الحد الإجمالي للصفوف المخزّنة لكل مستخدم <strong>3 مليون</strong> صف. المطابقة تتم من الملف الصغير إلى <strong>كل</strong> البيانات المخزّنة مع تطبيع رقم اللوحة؛ عمود النتيجة الأول يعرض رقم اللوحة المطابقة، وفي آخر الشيت يُذكر إن وُجدت لوحة في أكثر من ملف.</p>
+    <p style="font-size:.74rem;color:var(--dim2);line-height:1.65">يمكنك استيراد <strong>عدة ملفات كبيرة</strong>؛ بحد أقصى <strong>15MB</strong> لكل ملف. إذا احتوى ملف على <strong>أكثر من ورقة</strong>، يُستورد <strong>أول ورقة فقط</strong> (ما لم يُحدَّد اسم ورقة مطابق عند الطلب). الحد الإجمالي للصفوف المخزّنة لكل مستخدم <strong>3 مليون</strong> صف. المطابقة تتم من الملف الصغير إلى <strong>كل</strong> البيانات المخزّنة مع تطبيع رقم اللوحة؛ عمود النتيجة الأول يعرض رقم اللوحة المطابقة، وفي آخر الشيت يُذكر إن وُجدت لوحة في أكثر من ملف.</p>
     <div id="omStoredImportsList" style="margin-top:.6rem;font-size:.74rem"></div>
     <label style="display:flex;align-items:center;gap:.55rem;font-size:.8rem;margin:.55rem 0;cursor:pointer">
       <input type="checkbox" id="omUseStoredLargeCb" onchange="omOnToggleStoredLarge()"/>
@@ -732,12 +694,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
         </div>
       </div>
       <div style="margin-top:.65rem">
-        <label class="lbl">أعمدة Excel (الملف الكبير)</label>
-        <details class="check-export-drop" id="omCheckLargeExportDrop">
-          <summary>اختر الأعمدة الظاهرة في ورقة التطابق…</summary>
-          <div id="omLargeExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
-        </details>
-        <p class="check-export-hint">يُحدَّد تلقائياً أعمدة المركبة فقط (لون أساسي، نوع تسجيل اللوحة، طراز، صانع) وما يشابهها. باقي الأعمدة يدوياً. إن لم تختر شيئاً، يُصدَّر كل أعمدة الملف الكبير.</p>
+        <label class="lbl">أعمدة الملف الكبير في التطابق</label>
+        <p class="check-export-hint" style="margin-top:.35rem;line-height:1.55">يُصدَّر تلقائياً <strong>كل أعمدة</strong> الملف الكبير (أو البيانات المخزَّنة على الخادم) في ورقة النتيجة، بالإضافة إلى أعمدة الملف الصغير التي تختارها أدناه.</p>
       </div>
     </div>
     <div class="file-card violet-card">
@@ -803,6 +761,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       عمود الكبير: <span style="color:var(--sky)" id="omRLargeCol">&mdash;</span> &nbsp;|&nbsp; عمود الصغير: <span style="color:var(--violet)" id="omRSmallCol">&mdash;</span>
     </div>
     <p id="omMatchTruncNote" style="display:none;font-size:.72rem;color:var(--amber);margin-bottom:.6rem"></p>
+    <div id="omMatchPreviewHost" class="om-match-preview-host" style="display:none"></div>
     <div class="tbl-outer" id="omMatchTableWrap" style="display:none;margin-bottom:1rem;max-height:min(70vh,520px);overflow:auto">
       <table style="font-size:.78rem">
         <thead id="omMatchThead"></thead>
@@ -817,7 +776,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <div class="ptitle teal">&#x1F4CD; إعدادات مطابقة GPS</div>
       <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;padding:.6rem .9rem;background:rgba(20,184,166,.08);border:1px solid rgba(20,184,166,.25);border-radius:8px">
         <span>&#x2705;</span>
-        <span style="font-size:.78rem;color:var(--teal);font-weight:700">تم اكتشاف عمود GPS في الملف الكبير &mdash; بعد Match يُرتَّب أقرب المركبات باستخدام مفتاح ORS من &#x2699; الإعدادات وموقعك أدناه</span>
+        <span style="font-size:.78rem;color:var(--teal);font-weight:700">تم اكتشاف عمود GPS في الملف الكبير &mdash; بعد Match يُرتَّب أقرب المركبات عبر خادم التطبيق (مفاتيح ORS من الأدمن) وموقعك أدناه</span>
       </div>
       <div style="margin-bottom:.9rem">
         <label class="lbl">&#x1F4CD; موقعك الحالي (نقطة الانطلاق)</label>
@@ -996,7 +955,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   <div class="panel">
     <div class="ptitle">&#x1F30D; الخريطة</div>
     <div id="gmMap" style="height:460px;border:1px solid var(--brd);border-radius:10px;background:var(--s2);display:flex;align-items:center;justify-content:center;color:var(--dim2);font-size:.8rem">
-      أدخل مفتاح Google Maps API من الإعدادات ثم ارفع ملف .xlsx لعرض النقاط
+      سجّل الدخول ثم ارفع ملف .xlsx لعرض النقاط (مفتاح الخرائط من الخادم)
     </div>
   </div>
 </div><!-- /pageGmaps -->
@@ -1005,6 +964,20 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 
 <!-- ═══════════ PAGE: ADMIN ═══════════ -->
 <div id="pageAdmin" style="display:none">
+  <div class="panel" id="userGeminiModelBar" style="margin-bottom:.85rem">
+    <div class="ptitle">&#x1F916; موديلات Gemini (من الخادم)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.85rem;align-items:end">
+      <div>
+        <label class="lbl">التفريغ (REST)</label>
+        <select id="userRestModel" style="width:100%;padding:.55rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.78rem" onchange="onUserGeminiModelChange()"></select>
+      </div>
+      <div>
+        <label class="lbl">التشيك المباشر (Live)</label>
+        <select id="userLiveModel" style="width:100%;padding:.55rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.78rem" onchange="onUserGeminiModelChange()"></select>
+      </div>
+    </div>
+    <p style="font-size:.7rem;color:var(--dim2);margin-top:.55rem">موديلات Gemini تُضاف من القسم أدناه. <strong>مفاتيح API</strong> (مفتاح واحد لكل نوع للسيرفر): تُعرَض وتُحدَّث من <strong>لوحة الأدمن</strong> وتُخزَّن في <strong>ذاكرة السيرفر فقط</strong> (بدون قرص ولا قاعدة بيانات — تُفقد بعد إعادة التشغيل).</p>
+  </div>
   <div class="panel violet-accent">
     <div class="ptitle violet">&#x1F6E1;&#xFE0F; Admin</div>
     <div class="row2">
@@ -1028,11 +1001,53 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       </table>
     </div>
   </div>
+
+  <div class="panel teal-accent">
+    <div class="ptitle teal">&#x1F511; مفاتيح API (Gemini / ORS / Maps)</div>
+    <p style="font-size:.72rem;color:var(--dim2);margin:0 0 .65rem;line-height:1.5">ما يظهر في الخانات هو ما يُستخدم على السيرفر كله بعد «حفظ». خانة فارغة = لا مفتاح لهذا النوع في الذاكرة. بعد إعادة تشغيل السيرفر أعد الإدخال.</p>
+    <div style="display:grid;gap:.55rem;max-width:560px">
+      <div>
+        <label class="lbl">Gemini API</label>
+        <input type="text" id="admKeyGemini" autocomplete="off" spellcheck="false" placeholder="" style="width:100%;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+      </div>
+      <div>
+        <label class="lbl">OpenRouteService</label>
+        <input type="text" id="admKeyOrs" autocomplete="off" spellcheck="false" placeholder="" style="width:100%;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+      </div>
+      <div>
+        <label class="lbl">Google Maps (JavaScript)</label>
+        <input type="text" id="admKeyGmaps" autocomplete="off" spellcheck="false" placeholder="" style="width:100%;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+      </div>
+    </div>
+    <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <button type="button" class="tb-btn primary" onclick="adminSaveApiKeys()">حفظ المفاتيح</button>
+      <span id="admKeyStatus" style="font-size:.72rem;color:var(--dim2)"></span>
+    </div>
+  </div>
+
+  <div class="panel violet-accent">
+    <div class="ptitle violet">&#x1F916; موديلات Gemini (Admin)</div>
+    <div style="display:grid;grid-template-columns:1fr 2fr 1fr 1fr;gap:.45rem;align-items:end;margin:.5rem 0">
+      <div><label class="lbl">قناة</label>
+        <select id="admGmChannel" style="width:100%;padding:.4rem;border-radius:8px;border:1px solid var(--brd2)"><option value="rest">rest</option><option value="live">live</option></select></div>
+      <div><label class="lbl">model_id</label><input id="admGmModelId" type="text" placeholder="مثال: gemini-2.5-flash" style="width:100%;padding:.4rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/></div>
+      <div><label class="lbl">تسمية</label><input id="admGmLabel" type="text" style="width:100%;padding:.4rem;border-radius:8px;border:1px solid var(--brd2)"/></div>
+      <div><label class="lbl">ترتيب</label><input id="admGmSort" type="number" value="0" style="width:100%;padding:.4rem;border-radius:8px;border:1px solid var(--brd2)"/></div>
+    </div>
+    <button type="button" class="tb-btn primary" onclick="adminAddGeminiModel()">&#x2795; إضافة موديل</button>
+    <div class="tbl-outer" style="max-height:200px;overflow:auto;margin-top:.65rem">
+      <table style="font-size:.76rem">
+        <thead><tr><th>ID</th><th>channel</th><th>model_id</th><th>label</th><th></th></tr></thead>
+        <tbody id="adminGmModelsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 
 </div><!-- wrap -->
-<script src="/static/_om_field.js?v=pgcheck10"></script>
+<script src="/static/_om_field.js?v=pgcheck16"></script>
 <script>
 const MAX_REC_SECS=300;
 // ── State ──────────────────────────────────────────────
@@ -1044,6 +1059,8 @@ let queueItems=[],tableRows=[];
 const pendingDeletes=new Map();
 let checkLargeFile=null;
 let checkDetected={large:null};
+let checkTempSessionToken='';
+let checkTempStorageReady=false;
 let checkLiveWs=null,checkLiveMicOn=false,checkLiveAudioCtx=null,checkLiveScriptNode=null,checkLiveMediaStream=null;
 let checkLiveSilenceTimer=null,checkLiveLastVoiceAt=0;
 let checkLiveSfxCtx=null;
@@ -1103,11 +1120,12 @@ window.addEventListener('DOMContentLoaded',()=>{
   if(fcAud){ audioEls.fc=fcAud; bindAudioPlayer('fc'); }
   bindAudioPlayer('live');bindAudioPlayer('up');
   loadTable();renderTable();
+  if(typeof syncTafrighSheetTitle==='function') syncTafrighSheetTitle();
   if(document.getElementById('fcExtractedSection')) loadFcData();
   if(typeof loadOmPersistedCheckFiles==='function') loadOmPersistedCheckFiles();
   setMode('auto');
   if(document.getElementById('fcMM')) fcSetMode('auto');
-  loadSettings();
+  if(typeof refreshUserGeminiModels==='function') refreshUserGeminiModels();
   loadPersistedCheckFiles();
   setMode('auto');
   if(localStorage.getItem('theme')==='light')applyTheme('light');
@@ -1115,10 +1133,84 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 // ── Global settings ───────────────────────────────────
 function onGlobalChange(){ checkReady(); fcCheckReady(); }
-function toggleApiEye(){
-  const i=document.getElementById('globalApiKey'),b=document.getElementById('apiEyeBtn');
-  i.type=i.type==='password'?'text':'password';
-  b.textContent=i.type==='password'?'👁':'🙈';
+// ── User Gemini model picks (lists from server) ───────
+const USER_REST_MODEL_KEY='userGeminiRestModel_v1';
+const USER_LIVE_MODEL_KEY='userGeminiLiveModel_v1';
+let _geminiModelsCacheRest=[];
+let _geminiModelsCacheLive=[];
+function getUserRestModel(){
+  const el=document.getElementById('userRestModel');
+  if(el&&el.value) return String(el.value).trim();
+  const saved=(localStorage.getItem(USER_REST_MODEL_KEY)||'').trim();
+  if(saved&&_geminiModelsCacheRest.some(m=>m&&m.model_id===saved)) return saved;
+  const f=_geminiModelsCacheRest[0];
+  return f&&f.model_id?String(f.model_id).trim():'';
+}
+function getUserLiveModel(){
+  const el=document.getElementById('userLiveModel');
+  if(el&&el.value) return String(el.value).trim();
+  const saved=(localStorage.getItem(USER_LIVE_MODEL_KEY)||'').trim();
+  if(saved&&_geminiModelsCacheLive.some(m=>m&&m.model_id===saved)) return saved;
+  const f=_geminiModelsCacheLive[0];
+  return f&&f.model_id?String(f.model_id).trim():'';
+}
+function onUserGeminiModelChange(){
+  try{
+    const r=document.getElementById('userRestModel');
+    const l=document.getElementById('userLiveModel');
+    if(r&&r.value) localStorage.setItem(USER_REST_MODEL_KEY,r.value);
+    if(l&&l.value) localStorage.setItem(USER_LIVE_MODEL_KEY,l.value);
+  }catch(_){}
+  checkReady(); fcCheckReady();
+}
+async function refreshUserGeminiModels(){
+  const tok=localStorage.getItem('access_token')||'';
+  if(!tok){
+    _geminiModelsCacheRest=[];_geminiModelsCacheLive=[];
+    const sr=document.getElementById('userRestModel'),sl=document.getElementById('userLiveModel');
+    if(sr) sr.innerHTML='';
+    if(sl) sl.innerHTML='';
+    return;
+  }
+  try{
+    const [rr,rl]=await Promise.all([
+      fetch('/api/config/gemini-models?channel=rest'),
+      fetch('/api/config/gemini-models?channel=live'),
+    ]);
+    const jr=await rr.json().catch(()=>({}));
+    const jl=await rl.json().catch(()=>({}));
+    _geminiModelsCacheRest=Array.isArray(jr.models)?jr.models.slice():[];
+    _geminiModelsCacheLive=Array.isArray(jl.models)?jl.models.slice():[];
+    const sr=document.getElementById('userRestModel');
+    const sl=document.getElementById('userLiveModel');
+    if(sr){
+      sr.innerHTML='';
+      if(rr.ok&&(jr.models||[]).length){
+        (jr.models||[]).forEach(m=>{
+          const o=document.createElement('option');
+          o.value=m.model_id; o.textContent=(m.label||m.model_id);
+          sr.appendChild(o);
+        });
+        const saved=localStorage.getItem(USER_REST_MODEL_KEY)||'';
+        if(saved&&[...sr.options].some(o=>o.value===saved)) sr.value=saved;
+        else if(sr.options[0]) sr.value=sr.options[0].value;
+      }
+    }
+    if(sl){
+      sl.innerHTML='';
+      if(rl.ok&&(jl.models||[]).length){
+        (jl.models||[]).forEach(m=>{
+          const o=document.createElement('option');
+          o.value=m.model_id; o.textContent=(m.label||m.model_id);
+          sl.appendChild(o);
+        });
+        const saved=localStorage.getItem(USER_LIVE_MODEL_KEY)||'';
+        if(saved&&[...sl.options].some(o=>o.value===saved)) sl.value=saved;
+        else if(sl.options[0]) sl.value=sl.options[0].value;
+      }
+    }
+  }catch(e){}
+  checkReady(); fcCheckReady();
 }
 // ── Audio blob extension (تسجيل مباشر = WebM/Opus بدون تحويل) ──
 function audioBlobExt(blob){
@@ -1129,32 +1221,8 @@ function audioBlobExt(blob){
   if(t.includes('mp4')||t.includes('m4a'))return 'm4a';
   return 'webm';
 }
-// ══ SETTINGS MODAL ══════════════════════════════════════════
-let _sMTab = 1;
-const S_MODELS = {
-  1: 'gemini-2.5-flash',
-  2: 'gemini-3-flash-preview'
-};
-const S_MODEL_LABELS = {
-  1: 'الوضع 1 — gemini-2.5-flash (سريع، مجاني)',
-  2: 'الوضع 2 — gemini-3-flash-preview',
-  3: 'وضع يدوي — أدخل اسم النموذج',
-  4: 'Gemini Live — models/gemini-2.5-flash-native-audio-latest (صفحة التشيك المباشر؛ نفس مفتاح API)'
-};
-
+// ══ SETTINGS MODAL (معلومات + خروج) ═══════════════════════════════════════
 function openSettings(){
-  const ak = localStorage.getItem('sApiKey') || '';
-  const ok = localStorage.getItem('sOrsKey') || '';
-  const gk = localStorage.getItem('sGoogleMapsKey') || '';
-  let mt = parseInt(localStorage.getItem('sModelTab') || '1');
-  if(mt < 1 || mt > 4) mt = 1;
-  const mm = localStorage.getItem('sModelManual') || '';
-  document.getElementById('sApiKey').value   = ak;
-  document.getElementById('sOrsKey').value   = ok;
-  document.getElementById('sGoogleMapsKey').value = gk;
-  document.getElementById('sModelManual').value = mm;
-  _sMTab = mt;
-  _renderMTabs();
   document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings(){
@@ -1164,68 +1232,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const sm = document.getElementById('settingsModal');
   if(sm) sm.addEventListener('click', e => { if(e.target===e.currentTarget) closeSettings(); });
 });
-
-function selectMTab(n){
-  _sMTab = n;
-  _renderMTabs();
-}
-function _renderMTabs(){
-  [1,2,3,4].forEach(n => {
-    const btn = document.getElementById('smtab'+n);
-    if(!btn) return;
-    const active = n === _sMTab;
-    btn.style.background   = active ? 'linear-gradient(135deg,var(--teal),#0d9488)' : 'transparent';
-    btn.style.color        = active ? '#fff' : 'var(--dim2)';
-    btn.style.borderColor  = active ? 'transparent' : 'var(--brd2)';
-  });
-  const manualWrap = document.getElementById('sModelManualWrap');
-  const infoEl     = document.getElementById('sModelInfo');
-  if(manualWrap) manualWrap.style.display = _sMTab === 3 ? '' : 'none';
-  if(infoEl)     infoEl.textContent = S_MODEL_LABELS[_sMTab] || '';
-}
-function toggleSEye(inputId, btnId){
-  const inp = document.getElementById(inputId);
-  const btn = document.getElementById(btnId);
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-  btn.textContent = inp.type === 'password' ? '\u{1F441}' : '\u{1F648}';
-}
-function sUpdateSaveState(){}
-
-function saveSettings(){
-  const ak  = document.getElementById('sApiKey').value.trim();
-  const ok  = document.getElementById('sOrsKey').value.trim();
-  const gk  = document.getElementById('sGoogleMapsKey').value.trim();
-  const mm  = document.getElementById('sModelManual').value.trim();
-  localStorage.setItem('sApiKey',     ak);
-  localStorage.setItem('sOrsKey',     ok);
-  localStorage.setItem('sGoogleMapsKey', gk);
-  localStorage.setItem('sModelTab',   String(_sMTab));
-  localStorage.setItem('sModelManual',mm);
-  checkReady(); fcCheckReady();
-  closeSettings();
-}
-
-function getApiKey(){
-  return localStorage.getItem('sApiKey') || '';
-}
-function getOrsKey(){
-  return localStorage.getItem('sOrsKey') || '';
-}
-function getModelName(){
-  const mt = parseInt(localStorage.getItem('sModelTab') || '1');
-  if(mt === 4) return S_MODELS[1] || 'gemini-2.5-flash';
-  if(mt === 3){
-    const mm = localStorage.getItem('sModelManual') || '';
-    return mm || 'gemini-2.5-flash';
-  }
-  return S_MODELS[mt] || 'gemini-2.5-flash';
-}
-
-function loadSettings(){
-  let mt = parseInt(localStorage.getItem('sModelTab') || '1');
-  if(mt < 1 || mt > 4) mt = 1;
-  _sMTab = mt;
-}
 
 // ══ PERSIST UPLOADED EXCEL FILES ══════════════════════════════════════════
 async function fileToB64(file){
@@ -1394,22 +1400,21 @@ function getSelectedGmLabelCols(){
   const cbs=[...list.querySelectorAll('input[type=checkbox]')];
   return cbs.filter(x=>x.checked).map(x=>x.value);
 }
-function getGoogleMapsKey(){
-  return localStorage.getItem('sGoogleMapsKey') || '';
-}
 async function initGmapsPage(){
   try{
     await ensureGoogleMapsApi();
     ensureMapInstance();
     startGmapsUserLocationTracking();
   }catch(e){
-    showGmStatus('warn','أدخل مفتاح Google Maps API من الإعدادات أولاً');
+    showGmStatus('warn','تعذّر تحميل الخرائط — تأكد من تسجيل الدخول ومفتاح Maps في الأدمن.');
   }
 }
 async function ensureGoogleMapsApi(){
   if(window.google&&window.google.maps)return;
-  const key=getGoogleMapsKey();
-  if(!key)throw new Error('مفتاح Google Maps غير موجود — أدخله من الإعدادات');
+  const rk=await fetch('/api/config/maps-js-key');
+  const kj=await rk.json().catch(()=>({}));
+  if(!rk.ok||!kj.key)throw new Error(kj.detail||'مفتاح الخرائط غير متاح');
+  const key=String(kj.key);
   if(gmMapsApiPromise){await gmMapsApiPromise;return;}
   gmMapsApiPromise=new Promise((resolve,reject)=>{
     const old=document.getElementById('gmMapsScript');
@@ -1854,8 +1859,8 @@ function removeUploadFile(){uploadFile=null;uploadGps=[];document.getElementById
 // ── Queue ─────────────────────────────────────────────
 function checkReady(){
   const hasFile=!!uploadFile;
-  const hasKey=getApiKey().length>5;
-  const enabled=hasFile&&hasKey;
+  const hasModel=getUserRestModel().length>1;
+  const enabled=hasFile&&hasModel;
   ['upAddBtn','upDirectBtn'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
@@ -1899,12 +1904,21 @@ async function pollTranscribeStatus(jobId){
   }
   throw new Error('انتهت مهلة انتظار التفريغ');
 }
+function _districtFromInput(){
+  const el=document.getElementById('districtName');
+  return (el&&el.value||'').trim();
+}
+function _appendPlatesWithDistrict(plates){
+  if(!Array.isArray(tableRows)) tableRows=[];
+  const list=Array.isArray(plates)?plates:[];
+  const dn=_districtFromInput();
+  list.forEach(p=>{p.district_name=dn;tableRows.push(p);});
+}
 // ── Direct send ───────────────────────────────────────
 async function directSend(){
   const hasAudio=tab==='live'?!!liveBlob:!!uploadFile;
   if(!hasAudio){showStatus('err','لا يوجد تسجيل صوتي');return;}
-  const apiKey=getApiKey();
-  if(!apiKey){showStatus('err','أدخل مفتاح API أولاً');return;}
+  if(!getUserRestModel()){showStatus('err','لا يوجد موديل REST مفعّل على الخادم — أضفه من صفحة Admin.');return;}
 
   const blob=tab==='live'?liveBlob:uploadFile;
   const gps=tab==='live'?[...liveGps]:[...uploadGps];
@@ -1928,8 +1942,7 @@ async function directSend(){
   const ext=audioBlobExt(blob);
   fd.append('audio',blob,'recording.'+ext);
   fd.append('gps_data',JSON.stringify(gps));
-  fd.append('api_key',apiKey);
-  fd.append('model_name',getModelName());
+  fd.append('model_name',getUserRestModel());
   fd.append('recorder_name',document.getElementById('recorderName').value.trim());
   fd.append('sheet_name',document.getElementById('sheetName').value.trim()||'\u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062A');
 
@@ -1944,9 +1957,10 @@ async function directSend(){
     if(!jobId) throw new Error('لم يُرجع job_id');
     const data=await pollTranscribeStatus(jobId);
     item.status='done';renderQueue();
-    data.plates.forEach(p=>tableRows.push(p));
+    _appendPlatesWithDistrict(Array.isArray(data.plates)?data.plates:[]);
     saveTable();renderTable();
-    const msg='\u2714 \u062A\u0645 \u0627\u0644\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0645\u0628\u0627\u0634\u0631 \u2014 \u0627\u0633\u062A\u064F\u062E\u0631\u062C '+data.total+' \u0644\u0648\u062D\u0629';
+    const total=typeof data.total==='number'?data.total:(Array.isArray(data.plates)?data.plates.length:0);
+    const msg='\u2714 \u062A\u0645 \u0627\u0644\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0645\u0628\u0627\u0634\u0631 \u2014 \u0627\u0633\u062A\u064F\u062E\u0631\u062C '+total+' \u0644\u0648\u062D\u0629';
     showStatus('ok',msg);addLog(msg,'ok');
   }catch(rawErr){
     const msg=friendlyError(rawErr.message);
@@ -2028,7 +2042,7 @@ function removeItem(idx){
 async function sendItem(idx){
   const item=queueItems[idx];if(!item)return;
   if(item.status==='processing'){addLog('تحذير: '+item.name+' قيد المعالجة بالفعل','warn');return;}
-  const apiKey=getApiKey();if(!apiKey){showStatus('err','أدخل مفتاح API أولاً');return;}
+  if(!getUserRestModel()){showStatus('err','لا يوجد موديل REST مفعّل على الخادم — أضفه من صفحة Admin.');return;}
   item.status='processing';item.lastError=null;renderQueue();
   showStatus('proc','جاري تحليل "'+item.name+'" …',true);
   addLog('بدء تحليل: '+item.name,'info');
@@ -2036,7 +2050,7 @@ async function sendItem(idx){
   const ext=audioBlobExt(item.blob);
   fd.append('audio',item.blob,'recording.'+ext);
   fd.append('gps_data',JSON.stringify(item.gps));
-  fd.append('api_key',apiKey);fd.append('model_name',getModelName());
+  fd.append('model_name',getUserRestModel());
   fd.append('recorder_name',document.getElementById('recorderName').value.trim());
   fd.append('sheet_name',document.getElementById('sheetName').value.trim()||'بيانات المركبات');
   try{
@@ -2050,9 +2064,10 @@ async function sendItem(idx){
     if(!jobId) throw new Error('لم يُرجع job_id');
     const data=await pollTranscribeStatus(jobId);
     item.status='done';renderQueue();
-    data.plates.forEach(p=>tableRows.push(p));
+    _appendPlatesWithDistrict(Array.isArray(data.plates)?data.plates:[]);
     saveTable();renderTable();
-    const msg='✔ استُخرج '+data.total+' لوحة من "'+item.name+'"';
+    const total=typeof data.total==='number'?data.total:(Array.isArray(data.plates)?data.plates.length:0);
+    const msg='✔ استُخرج '+total+' لوحة من "'+item.name+'"';
     showStatus('ok',msg);addLog(msg,'ok');
   }catch(rawErr){
     const msg=friendlyError(rawErr.message);
@@ -2075,13 +2090,33 @@ async function sendAll(){
 }
 async function sendAllQueued(){await sendAll();}
 // ── Excel table ───────────────────────────────────────
-function saveTable(){try{localStorage.setItem('plateTable_v5',JSON.stringify(tableRows));}catch(e){}}
-function loadTable(){try{const s=localStorage.getItem('plateTable_v5');if(s)tableRows=JSON.parse(s);}catch(e){tableRows=[];}}
+function saveTable(){
+  if(!Array.isArray(tableRows)) tableRows=[];
+  try{localStorage.setItem('plateTable_v5',JSON.stringify(tableRows));}catch(e){}
+}
+function loadTable(){
+  try{
+    const s=localStorage.getItem('plateTable_v5');
+    if(!s){tableRows=[];return;}
+    const parsed=JSON.parse(s);
+    if(Array.isArray(parsed)) tableRows=parsed;
+    else if(parsed&&typeof parsed==='object'&&Array.isArray(parsed.rows)) tableRows=parsed.rows;
+    else tableRows=[];
+  }catch(e){tableRows=[];}
+}
 function streetLocForRow(row){
   if(row && row.street_location!=null && String(row.street_location).trim()!=='') return String(row.street_location).trim();
   return midGpsValue(row&&[row]||[]);
 }
+function syncTafrighSheetTitle(){
+  const bar=document.getElementById('tafrighSheetTitlebar');
+  const inp=document.getElementById('sheetName');
+  if(!bar||!inp) return;
+  const t=inp.value.trim();
+  bar.textContent=t||'بيانات المركبات';
+}
 function renderTable(){
+  if(!Array.isArray(tableRows)) tableRows=[];
   const body=document.getElementById('excelBody');body.innerHTML='';
   tableRows.forEach((row,i)=>{
     const tr=document.createElement('tr');
@@ -2089,6 +2124,7 @@ function renderTable(){
       '<td class="td-plate td-edit" contenteditable="true" onblur="editCell('+i+',\'full_plate\',this.textContent)">'+esc(row.full_plate||row.plate||'')+'</td>'
       +'<td class="td-gps">'+esc(row.gps||'—')+'</td>'
       +'<td class="td-edit" style="font-family:var(--mono);font-size:.78rem" contenteditable="true" onblur="editCell('+i+',\'recording_date\',this.textContent)">'+esc(row.recording_date||'')+'</td>'
+      +'<td class="td-edit" contenteditable="true" onblur="editCell('+i+',\'district_name\',this.textContent)">'+esc(row.district_name||'')+'</td>'
       +'<td class="td-edit" contenteditable="true" onblur="editCell('+i+',\'street_name\',this.textContent)">'+esc(row.street_name||'')+'</td>'
       +'<td class="td-edit td-locdetails" style="font-size:.78rem;color:var(--dim2)" contenteditable="true" onblur="editCell('+i+',\'location_details\',this.textContent)">'+esc(row.location_details||'')+'</td>'
       +'<td class="td-edit" contenteditable="true" onblur="editCell('+i+',\'vehicle_type\',this.textContent)">'+esc(row.vehicle_type||'')+'</td>'
@@ -2101,7 +2137,7 @@ function renderTable(){
 }
 function editCell(idx,key,val){if(tableRows[idx])tableRows[idx][key]=val.trim();saveTable();}
 function deleteRow(idx){tableRows.splice(idx,1);saveTable();renderTable();}
-function addEmptyRow(){tableRows.push({full_plate:'',vehicle_type:'ملاكى',street_name:'',gps:'',location_details:'',recorder_name:'',recording_date:'',street_location:''});saveTable();renderTable();}
+function addEmptyRow(){tableRows.push({full_plate:'',vehicle_type:'ملاكى',district_name:'',street_name:'',gps:'',location_details:'',recorder_name:'',recording_date:'',street_location:''});saveTable();renderTable();}
 function clearTable(){if(!tableRows.length)return;if(confirm('هل تريد مسح كل الصفوف؟')){tableRows=[];saveTable();renderTable();}}
 
 function midGpsValue(rows){
@@ -2115,7 +2151,10 @@ async function exportExcel(){
   const sheetName=document.getElementById('sheetName').value.trim()||'بيانات المركبات';
   showStatus('proc','جاري تصدير Excel …',true);
   try{
-    const fd=new FormData();fd.append('rows_json',JSON.stringify(tableRows));fd.append('sheet_name',sheetName);
+    const fd=new FormData();
+    fd.append('rows_json',JSON.stringify(tableRows));
+    fd.append('sheet_name',sheetName);
+    fd.append('district_default',(document.getElementById('districtName')&&document.getElementById('districtName').value||'').trim());
     const res=await fetch('/api/export-excel',{method:'POST',body:fd});
     if(!res.ok){const err=await res.json().catch(()=>({detail:res.statusText}));throw new Error(err.detail||res.statusText);}
     triggerDownload(await res.blob(),'تفريغ_'+sheetName+'.xlsx');showStatus('ok','✔ تم تحميل ملف Excel');
@@ -2127,7 +2166,11 @@ async function importExcel(f){
     const fd=new FormData();fd.append('file',f);
     const res=await fetch('/api/parse-excel',{method:'POST',body:fd});
     if(!res.ok){const err=await res.json().catch(()=>({detail:res.statusText}));throw new Error(err.detail||res.statusText);}
-    const data=await res.json();tableRows=[...tableRows,...data.rows];saveTable();renderTable();showStatus('ok','✔ تم استيراد '+data.total+' صف');
+    const data=await res.json();
+    const rows=Array.isArray(data.rows)?data.rows:[];
+    if(!Array.isArray(tableRows)) tableRows=[];
+    tableRows=[...tableRows,...rows];
+    saveTable();renderTable();showStatus('ok','✔ تم استيراد '+data.total+' صف');
   }catch(e){showStatus('err','خطأ في الاستيراد: '+e.message);}
   document.getElementById('xlsIn').value='';
 }
@@ -2136,14 +2179,17 @@ let checkLiveExcelReady=false;
 function onCheckFileChange(file,side){
   if(!file||side!=='large')return;
   checkLargeFile=file;
+  checkTempStorageReady=false;
   checkLiveExcelReady=false;
   if(typeof checkLiveStopMicOnly==='function') checkLiveStopMicOnly();
+  showCheckStatus('proc','جارٍ استيراد ملف التشيك مباشرة بعد الرفع ...',true);
   document.getElementById('largeFname').textContent='\u{1F4CE} '+file.name;
   document.getElementById('removeLargeBtn').classList.add('show');
   if(!document.getElementById('largeCol').value.trim())setBadge('large','pending','...');
   document.getElementById('checkHeadersHint').style.display='none';
   document.getElementById('checkHeadersContent').innerHTML='';
   detectColForSide('large');
+  checkTempUploadCurrentFile();
   persistCheckFile('large',file);
 }
 function handleDropCheck(e,side){
@@ -2155,6 +2201,7 @@ function handleDropCheck(e,side){
 function removeCheckFile(side){
   if(side!=='large') return;
   checkLargeFile=null;
+  checkTempStorageReady=false;
   checkLiveExcelReady=false;
   if(typeof checkLiveStopAll==='function') checkLiveStopAll();
   document.getElementById('largeFname').textContent='';
@@ -2166,6 +2213,7 @@ function removeCheckFile(side){
   setBadge('large','pending','\u2014');
   clearPersistedCheckFile('large');
   resetCheckDetect();
+  checkTempCloseSession();
 }
 function resetColDropdown(side){
   const sel=document.getElementById(side+'Col');
@@ -2210,11 +2258,19 @@ async function detectColForSide(side){
   setBadge('large','pending','...');
   try{
     const res=await fetch('/api/check-headers',{method:'POST',body:fd});
-    if(!res.ok){setBadge('large','notfound','\u26A0 \u062E\u0637\u0623');return;}
+    if(!res.ok){
+      setBadge('large','notfound','\u26A0 \u062E\u0637\u0623');
+      showCheckStatus('err','فشل تجهيز ملف التشيك. حاول مرة أخرى.',false);
+      return;
+    }
     const data=await res.json();
     const info=data.large;
     if(!info){return;}
-    if(info.error){setBadge('large','notfound','\u26A0 '+info.error.slice(0,30));return;}
+    if(info.error){
+      setBadge('large','notfound','\u26A0 '+info.error.slice(0,30));
+      showCheckStatus('err','تعذر قراءة ملف التشيك: '+String(info.error||''),false);
+      return;
+    }
     fillColDropdown('large',info.headers||[],document.getElementById('largeCol').value.trim());
     if(info.detected&&!document.getElementById('largeCol').value.trim()){
       document.getElementById('largeCol').value=info.detected;
@@ -2227,7 +2283,11 @@ async function detectColForSide(side){
       if(info.headers&&info.headers.length) showHeadersHint('large',info.headers);
     }
     if(typeof checkLiveSendPlateColumn==='function') checkLiveSendPlateColumn();
-  }catch(e){setBadge('large','notfound','\u26A0');}
+    showCheckStatus('ok','✅ تم تجهيز ملف التشيك ويمكنك البدء الآن.',false);
+  }catch(e){
+    setBadge('large','notfound','\u26A0');
+    showCheckStatus('err','فشل تجهيز ملف التشيك. تحقق من الاتصال ثم أعد المحاولة.',false);
+  }
 }
 function showHeadersHint(side,headers){
   if(side!=='large') return;
@@ -2244,6 +2304,7 @@ function confirmLargePw(){
   if(!checkLargeFile){showCheckStatus('err','\u064A\u0631\u062C\u0649 \u0631\u0641\u0639 \u0627\u0644\u0645\u0644\u0641 \u0623\u0648\u0644\u0627\u064B');return;}
   resetCheckDetect();
   detectColForSide('large');
+  checkTempUploadCurrentFile();
 }
 
 function checkLiveSetWsUi(connected,txt){
@@ -2375,6 +2436,10 @@ function checkLiveOnMessage(ev){
 }
 async function checkLivePushWorkbook(){
   if(!checkLiveWs || checkLiveWs.readyState!==1) return;
+  if(checkTempStorageReady){
+    checkLiveExcelReady=true;
+    return;
+  }
   if(!checkLargeFile){
     showCheckStatus('warn','\u0644\u0627 \u064A\u0648\u062C\u062F \u0645\u0644\u0641 \u2014 \u0627\u0631\u0641\u0639 Excel \u0623\u0648\u0644\u0627\u064B');
     return;
@@ -2388,6 +2453,7 @@ async function checkLivePushWorkbook(){
   }
 }
 function checkLiveSendPlateColumn(){
+  if(checkTempStorageReady) return;
   if(!checkLiveWs || checkLiveWs.readyState!==1 || !checkLiveExcelReady) return;
   const col=document.getElementById('largeCol').value.trim();
   if(!col) return;
@@ -2425,8 +2491,10 @@ function checkLiveStopAll(){
   try{
     if(checkLiveWs){ checkLiveWs.close(); checkLiveWs=null; }
   }catch(e){}
+  checkTempCloseSession();
   checkLiveSetWsUi(false,'\u063A\u064A\u0631 \u0645\u062A\u0635\u0644');
 }
+window.addEventListener('beforeunload',function(){ checkTempCloseSession(); });
 function getCheckLiveClientId(){
   try{
     let id=localStorage.getItem(CHECK_LIVE_CLIENT_ID_KEY)||'';
@@ -2449,8 +2517,8 @@ function checkLiveStartHeartbeat(){
 async function checkLiveEnsureSocket(){
   const tok=localStorage.getItem('access_token')||'';
   if(!tok){ showCheckStatus('err','\u0633\u062C\u0651\u0644 \u0627\u0644\u062F\u062E\u0648\u0644 \u0623\u0648\u0644\u0627\u064B'); return false; }
-  const apiKey=getApiKey().trim();
-  if(!apiKey){ showCheckStatus('err','\u0623\u0636\u0641 \u0645\u0641\u062A\u0627\u062D Gemini \u0641\u064A \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A'); return false; }
+  const lm=(typeof getUserLiveModel==='function'?getUserLiveModel():'').trim();
+  if(!lm){ showCheckStatus('err','\u0644\u0627 \u064A\u0648\u062C\u062F \u0645\u0648\u062F\u064A\u0644 Live \u0645\u0641\u0639\u0651\u0644 \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645 \u2014 \u0623\u0636\u0641\u0647 \u0645\u0646 \u0635\u0641\u062D\u0629 Admin.'); return false; }
   if(checkLiveWs && checkLiveWs.readyState===1) return true;
   if(checkLiveWs){
     try{ checkLiveWs.close(); }catch(e){}
@@ -2469,7 +2537,14 @@ async function checkLiveEnsureSocket(){
     wsUrl.protocol=location.protocol==='https:'?'wss:':'ws:';
     const ws=new WebSocket(wsUrl.toString());
     checkLiveWs=ws;
-    ws.onopen=function(){ ws.send(JSON.stringify({type:'init',api_key:apiKey,client_id:getCheckLiveClientId()})); };
+    ws.onopen=function(){
+      ws.send(JSON.stringify({
+        type:'init',
+        live_model:lm,
+        client_id:getCheckLiveClientId(),
+        temp_session_token:checkTempSessionToken||''
+      }));
+    };
     ws.onerror=function(){
       showCheckStatus('err','\u062A\u0639\u0630\u0631 \u0627\u062A\u0635\u0627\u0644 WebSocket');
       checkLiveSetWsUi(false,'\u062E\u0637\u0623');
@@ -2492,6 +2567,42 @@ async function checkLiveEnsureSocket(){
       }catch(e){}
     };
   });
+}
+async function checkTempEnsureSession(){
+  if(checkTempSessionToken) return checkTempSessionToken;
+  const r=await fetch('/api/check/temp/session/start',{method:'POST'});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.detail||r.statusText||'فشل بدء جلسة التشيك');
+  checkTempSessionToken=String(j.session_token||'');
+  return checkTempSessionToken;
+}
+async function checkTempUploadCurrentFile(){
+  if(!checkLargeFile) return;
+  try{
+    const tok=await checkTempEnsureSession();
+    const fd=new FormData();
+    fd.append('session_token',tok);
+    fd.append('large_file',checkLargeFile);
+    const pw=document.getElementById('largePw').value.trim();
+    if(pw) fd.append('password',pw);
+    const col=document.getElementById('largeCol').value.trim();
+    if(col) fd.append('large_col',col);
+    const res=await fetch('/api/check/temp/upload-large',{method:'POST',body:fd});
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(j.detail||res.statusText||'فشل رفع ملف التشيك إلى Postgres');
+    checkTempStorageReady=true;
+    checkLiveExcelReady=true;
+    showCheckStatus('ok','✅ تم رفع ملف التشيك مؤقتًا إلى Postgres ('+String(j.stored_count||0)+' لوحة)',false);
+  }catch(e){
+    checkTempStorageReady=false;
+    showCheckStatus('err','تعذر رفع ملف التشيك إلى Postgres: '+(e.message||''),false);
+  }
+}
+async function checkTempCloseSession(){
+  if(!(checkTempSessionToken||'').trim()) return;
+  checkTempSessionToken='';
+  // Do not delete temp rows immediately on close/unload.
+  // Backend TTL cleanup (30 minutes) handles deletion for صفحة التشيك.
 }
 async function checkLiveToggleMic(){
   if(checkLiveMicOn){
@@ -2827,9 +2938,9 @@ async function fcCheckSinglePlate(){
 // ── Field check — ready state ──────────────────────────
 function fcCheckReady(){
   const hasBlob=!!fcLiveBlob;
-  const hasKey=getApiKey().length>5;
+  const hasModel=(typeof getUserRestModel==='function'&&getUserRestModel().length>1);
   const btn=document.getElementById('fcCheckInline');
-  if(btn){btn.disabled=!(hasBlob&&hasKey);btn.style.opacity=(hasBlob&&hasKey)?'1':'0.35';}
+  if(btn){btn.disabled=!(hasBlob&&hasModel);btn.style.opacity=(hasBlob&&hasModel)?'1':'0.35';}
 }
 
 function normPlate(s){
@@ -2870,8 +2981,7 @@ function fcBuildGoogleMapsDirUrl(originLatLngStr, destLatLngStr){
 
 async function fcDoCheck(){
   if(!fcLiveBlob){fcShowStatus('err','لا يوجد تسجيل — سجّل صوتاً أولاً');return;}
-  const apiKey=getApiKey();
-  if(!apiKey){fcShowStatus('err','أدخل مفتاح API في الأعلى');return;}
+  if(!getUserRestModel()){fcShowStatus('err','لا يوجد موديل REST مفعّل على الخادم — أضفه من صفحة Admin.');return;}
 
   document.getElementById('fcCheckInline').disabled=true;
 
@@ -2880,8 +2990,7 @@ async function fcDoCheck(){
   const ext=audioBlobExt(fcLiveBlob);
   fd.append('audio',fcLiveBlob,'recording.'+ext);
   fd.append('gps_data',JSON.stringify(fcGpsPoints));
-  fd.append('api_key',apiKey);
-  fd.append('model_name',getModelName());
+  fd.append('model_name',getUserRestModel());
   fd.append('recorder_name',document.getElementById('fcRecorderName').value.trim());
   fd.append('sheet_name',document.getElementById('fcSheetName').value.trim()||'التشيك الميداني');
 
@@ -2896,7 +3005,7 @@ async function fcDoCheck(){
     const jobId=start.job_id;
     if(!jobId) throw new Error('لم يُرجع job_id');
     const data=await pollTranscribeStatus(jobId);
-    newRows=data.plates||[];
+    newRows=Array.isArray(data.plates)?data.plates:[];
     fcShowStatus('proc','تم التفريغ — استُخرج '+newRows.length+' لوحة. جاري التشيك …',true);
   }catch(rawErr){
     fcShowStatus('err',friendlyError(rawErr.message));
@@ -2904,6 +3013,8 @@ async function fcDoCheck(){
     return;
   }
 
+  if(!Array.isArray(fcAllRows)) fcAllRows=[];
+  if(!Array.isArray(newRows)) newRows=[];
   fcAllRows=[...fcAllRows,...newRows];
   fcExtractedRows=newRows;
   fcLastMyLatLng = fcMidLatLngStr(fcGpsPoints);
@@ -2932,7 +3043,7 @@ async function fcDoCheck(){
       fcResetRecUI();
       return;
     }
-    fcRefPlates=d2.plates||[];
+    fcRefPlates=Array.isArray(d2.plates)?d2.plates:[];
   }catch(e){
     fcShowStatus('warn','تم التفريغ لكن فشل قراءة ملف المرجع: '+e.message);
     document.getElementById('fcCheckInline').disabled=false;
@@ -3066,7 +3177,9 @@ async function fcImportExcel(f){
     const res=await fetch('/api/parse-excel',{method:'POST',body:fd});
     if(!res.ok){const err=await res.json().catch(()=>({detail:res.statusText}));throw new Error(err.detail||res.statusText);}
     const data=await res.json();
-    fcAllRows=[...fcAllRows,...data.rows];
+    const fcRows=Array.isArray(data.rows)?data.rows:[];
+    if(!Array.isArray(fcAllRows)) fcAllRows=[];
+    fcAllRows=[...fcAllRows,...fcRows];
     saveFcData();fcRenderExtracted();
     document.getElementById('fcExtractedSection').style.display='';
     document.getElementById('fcAllCount').textContent=fcAllRows.length+' لوحة';
@@ -3088,7 +3201,7 @@ async function fcCheckAll(){
       const hint=d.headers?'الأعمدة المتاحة: '+d.headers.join(' | '):'';
       fcShowStatus('err',(d.detail||'خطأ في قراءة الملف')+(hint?' — '+hint:''));return;
     }
-    fcRefPlates=d.plates||[];
+    fcRefPlates=Array.isArray(d.plates)?d.plates:[];
     if(!fcRefPlates.length){fcShowStatus('warn','الملف المرجعي لا يحتوي على لوحات');return;}
   }catch(e){fcShowStatus('err','خطأ في قراءة ملف المرجع: '+e.message);return;}
   const refSet=new Set(fcRefPlates.map(normPlate));
@@ -3108,6 +3221,9 @@ async function fcCheckAll(){
 }
 function saveFcData(){
   try{
+    if(!Array.isArray(fcAllRows)) fcAllRows=[];
+    if(!Array.isArray(fcMatchedRows)) fcMatchedRows=[];
+    if(!Array.isArray(fcExtractedRows)) fcExtractedRows=[];
     localStorage.setItem('fcAllRows_v5',JSON.stringify(fcAllRows));
     localStorage.setItem('fcMatchedRows_v5',JSON.stringify(fcMatchedRows));
     localStorage.setItem('fcExtractedRows_v5',JSON.stringify(fcExtractedRows));
@@ -3121,9 +3237,9 @@ function loadFcData(){
     const ex=localStorage.getItem('fcExtractedRows_v5');
     const mx=localStorage.getItem('fcMatchedRows_v5');
     const ml=localStorage.getItem('fcLastMyLatLng_v5');
-    if(al)fcAllRows=JSON.parse(al);
-    if(ex)fcExtractedRows=JSON.parse(ex);
-    if(mx)fcMatchedRows=JSON.parse(mx);
+    if(al){const p=JSON.parse(al);fcAllRows=Array.isArray(p)?p:[];}
+    if(ex){const p=JSON.parse(ex);fcExtractedRows=Array.isArray(p)?p:[];}
+    if(mx){const p=JSON.parse(mx);fcMatchedRows=Array.isArray(p)?p:[];}
     fcLastMyLatLng = ml ? String(ml) : null;
     if(fcAllRows.length){
       fcRenderExtracted();
@@ -3338,6 +3454,7 @@ function applyAdminNavVisibility(){
       emitAuthStateChanged(true);
       setMsg('تم تسجيل الدخول',true);
       showLock(false);
+      try{ if(typeof refreshUserGeminiModels==='function') await refreshUserGeminiModels(); }catch(_){}
       try{ await runPostLoginPermissions(); }catch(_){}
     }catch(e){ setMsg('تعذر الاتصال بالخادم — تحقق من الشبكة.',false); }
   };
@@ -3370,6 +3487,9 @@ function applyAdminNavVisibility(){
       ['navTafrigh','navField','navCheck','navGmaps','navAdmin'].forEach(id=>{const b=document.getElementById(id); if(b) b.classList.remove('active');});
       const nb=document.getElementById('navAdmin'); if(nb) nb.classList.add('active');
       if(typeof window.adminLoadUsers==='function') window.adminLoadUsers();
+      try{ if(typeof refreshUserGeminiModels==='function') void refreshUserGeminiModels(); }catch(_){}
+      if(typeof window.adminLoadGeminiModelsAdmin==='function') window.adminLoadGeminiModelsAdmin();
+      if(typeof window.adminLoadApiKeys==='function') window.adminLoadApiKeys();
       return;
     }
     const ap=document.getElementById('pageAdmin'); if(ap) ap.style.display='none';
@@ -3411,6 +3531,80 @@ function applyAdminNavVisibility(){
       });
       m.style.color='var(--green)'; m.textContent='تم تحميل المستخدمين';
     }catch(e){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; }
+  };
+
+  window.adminLoadGeminiModelsAdmin=async function(){
+    const body=document.getElementById('adminGmModelsBody');
+    if(!body) return;
+    try{
+      const r=await fetch('/admin/provider/gemini-models');
+      const j=await r.json().catch(()=>[]);
+      if(!r.ok) throw new Error((j&&j.detail)||'فشل');
+      body.innerHTML='';
+      (j||[]).forEach(function(m){
+        const tr=document.createElement('tr');
+        tr.innerHTML='<td>'+m.id+'</td><td>'+String(m.channel)+'</td><td style="font-family:var(--mono);font-size:.68rem">'+String(m.model_id)+'</td><td>'+(m.label||'—')+'</td>'+
+          '<td><button type="button" class="tb-btn danger" style="padding:.2rem .4rem;font-size:.65rem" onclick="adminDeleteGeminiModel('+m.id+')">حذف</button></td>';
+        body.appendChild(tr);
+      });
+    }catch(e){}
+  };
+
+  window.adminAddGeminiModel=async function(){
+    const m=document.getElementById('adminMsg');
+    const channel=(document.getElementById('admGmChannel')||{}).value||'rest';
+    const model_id=(document.getElementById('admGmModelId')||{}).value||'';
+    const label=(document.getElementById('admGmLabel')||{}).value||'';
+    const sort_order=parseInt((document.getElementById('admGmSort')||{}).value||'0',10)||0;
+    try{
+      const r=await fetch('/admin/provider/gemini-models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:channel,model_id:model_id,label:label||null,sort_order:sort_order})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل');
+      if(m){ m.style.color='var(--green)'; m.textContent='تمت إضافة الموديل'; }
+      document.getElementById('admGmModelId').value='';
+      await window.adminLoadGeminiModelsAdmin();
+      try{ if(typeof refreshUserGeminiModels==='function') await refreshUserGeminiModels(); }catch(_){}
+    }catch(e){ if(m){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; } }
+  };
+
+  window.adminDeleteGeminiModel=async function(id){
+    if(!confirm('حذف هذا الموديل من الكتالوج؟')) return;
+    const m=document.getElementById('adminMsg');
+    try{
+      const r=await fetch('/admin/provider/gemini-models/'+id,{method:'DELETE'});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل');
+      await window.adminLoadGeminiModelsAdmin();
+      try{ if(typeof refreshUserGeminiModels==='function') await refreshUserGeminiModels(); }catch(_){}
+    }catch(e){ if(m){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; } }
+  };
+
+  window.adminLoadApiKeys=async function(){
+    const st=document.getElementById('admKeyStatus');
+    try{
+      const r=await fetch('/admin/provider/api-keys');
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل تحميل المفاتيح');
+      const g=document.getElementById('admKeyGemini'); if(g) g.value=typeof j.gemini_api_key==='string'?j.gemini_api_key:'';
+      const o=document.getElementById('admKeyOrs'); if(o) o.value=typeof j.ors_api_key==='string'?j.ors_api_key:'';
+      const m=document.getElementById('admKeyGmaps'); if(m) m.value=typeof j.gmaps_api_key==='string'?j.gmaps_api_key:'';
+      if(st) st.textContent='تم التحميل — ما في الخانات هو المفعّل على السيرفر بعد آخر حفظ.';
+    }catch(e){ if(st) st.textContent=e.message||'فشل'; }
+  };
+
+  window.adminSaveApiKeys=async function(){
+    const st=document.getElementById('admKeyStatus');
+    const g=(document.getElementById('admKeyGemini')||{}).value||'';
+    const o=(document.getElementById('admKeyOrs')||{}).value||'';
+    const m=(document.getElementById('admKeyGmaps')||{}).value||'';
+    const body={gemini_api_key:g,ors_api_key:o,gmaps_api_key:m};
+    try{
+      const r=await fetch('/admin/provider/api-keys',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل الحفظ');
+      if(st) st.textContent='تم الحفظ — السيرفر يستخدم الآن القيم المعروضة في الخانات.';
+      await window.adminLoadApiKeys();
+    }catch(e){ if(st) st.textContent=e.message||'فشل'; }
   };
 
   window.adminSetActive=async function(id,active){
@@ -3459,6 +3653,7 @@ function applyAdminNavVisibility(){
         localStorage.setItem('auth_is_admin', j.is_admin?'1':'0');
         if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
       }
+      if(r.ok){ try{ if(typeof refreshUserGeminiModels==='function') await refreshUserGeminiModels(); }catch(_){} }
     }catch(_){}
   }
 

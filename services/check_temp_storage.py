@@ -185,6 +185,55 @@ def _get_session_id(cur, user_id: int, session_token: str) -> int | None:
     return int(row[0]) if row else None
 
 
+def delete_temp_session_sync(
+    dsn: str, user_id: int, is_admin: bool, session_token: str
+) -> bool:
+    ensure_check_temp_schema(dsn)
+    tok = (session_token or "").strip()
+    if not tok:
+        return False
+    with _tx(dsn, user_id, is_admin) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM check_temp_sessions
+                WHERE token = %s::uuid AND user_id = %s
+                """,
+                (tok, user_id),
+            )
+            return cur.rowcount > 0
+
+
+def temp_plate_exists_sync(
+    dsn: str,
+    user_id: int,
+    is_admin: bool,
+    *,
+    session_token: str,
+    plate_text: str,
+) -> bool:
+    ensure_check_temp_schema(dsn)
+    pn = normalize_plate(plate_text or "")
+    if not pn:
+        return False
+    with _tx(dsn, user_id, is_admin) as conn:
+        with conn.cursor() as cur:
+            sid = _get_session_id(cur, user_id, session_token)
+            if sid is None:
+                return False
+            cur.execute("UPDATE check_temp_sessions SET last_seen_at = now() WHERE id = %s", (sid,))
+            cur.execute(
+                """
+                SELECT 1
+                FROM check_temp_plates
+                WHERE session_id = %s AND user_id = %s AND plate_normalized = %s
+                LIMIT 1
+                """,
+                (sid, user_id, pn),
+            )
+            return cur.fetchone() is not None
+
+
 def upload_large_temp_plates_sync(
     dsn: str,
     user_id: int,

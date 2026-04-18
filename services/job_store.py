@@ -59,6 +59,11 @@ async def init_job_store() -> None:
     print("job_store: using Redis for shared job state", flush=True)
 
 
+async def get_shared_redis():
+    """Connected async Redis client when REDIS_URL is set; else None."""
+    return _redis if _use_redis else None
+
+
 async def close_job_store() -> None:
     global _redis, _use_redis
     if _redis is not None:

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import csv
 import io
 import itertools
 import json
 import logging
+import os
 import re
+import unicodedata
+import tempfile
 import threading
 from collections import defaultdict
 from contextlib import contextmanager
@@ -38,6 +42,71 @@ logger = logging.getLogger(__name__)
 CHECK_PG_MAX_LARGE_BYTES = 15 * 1024 * 1024
 CHECK_PG_MAX_ROWS_PER_USER = 3_000_000
 GPS_HEADER = "GPS"
+
+
+def _norm_header_sim(s: str) -> str:
+    """
+    Same idea as static/_om_field.js omNormHeaderForSim: map union export names
+    to per-file JSONB keys (e.g. اللوحة vs اللوحه, أ vs ا).
+    """
+    t = unicodedata.normalize("NFKC", str(s or ""))
+    for ch in ("\u0640", "\u061c", "\u200c", "\u200d", "\u200e", "\u200f", "\ufeff"):
+        t = t.replace(ch, "")
+    for ch in ("\u0623", "\u0625", "\u0622"):
+        t = t.replace(ch, "\u0627")
+    t = t.replace("\u0629", "\u0647").replace("\u0649", "\u064a")
+    t = re.sub(r"\s+", "", t).strip().lower()
+    return t
+
+
+def _row_norm_key_index(row_dict: dict[str, Any]) -> dict[str, str]:
+    """normalized header -> first original key in row_data."""
+    idx: dict[str, str] = {}
+    for k in row_dict:
+        ks = str(k) if k is not None else ""
+        nk = _norm_header_sim(ks)
+        if nk and nk not in idx:
+            idx[nk] = ks
+    return idx
+
+
+def _map_export_headers_to_sheet(requested: list[str], lh: list[str]) -> list[str]:
+    """
+    أعمدة الاختيار في الواجهة تُبنى من اتحاد كل الملفات؛ نربط كل اسم مختار
+    بعمود الشيت الحقيقي (نفس ترتيب الاختيار) حتى تطابق مفاتيح JSONB.
+    """
+    lh_list = [str(h).strip() for h in lh if h and str(h).strip()]
+    req_clean = [str(c).strip() for c in (requested or []) if c and str(c).strip()]
+    if not lh_list:
+        # استيراد قديم / column_order فاضي في DB — لا نُسقط أعمدة الملف الكبير
+        return req_clean
+    if not requested:
+        return lh_list
+    lh_set = set(lh_list)
+    norm_to_lh: dict[str, str] = {}
+    for h in lh_list:
+        nk = _norm_header_sim(h)
+        if nk and nk not in norm_to_lh:
+            norm_to_lh[nk] = h
+    out: list[str] = []
+    used_nk: set[str] = set()
+    for c in requested:
+        cs = str(c).strip() if c else ""
+        if not cs:
+            continue
+        if cs in lh_set:
+            nk = _norm_header_sim(cs)
+            if nk not in used_nk:
+                used_nk.add(nk)
+                out.append(cs)
+            continue
+        nk = _norm_header_sim(cs)
+        real = norm_to_lh.get(nk)
+        if real and nk not in used_nk:
+            used_nk.add(nk)
+            out.append(real)
+    return out if out else lh_list
+
 
 # ألوان ترويسة أقسام الملفات الكبيرة (دوّار)
 FILE_SECTION_HEADER_FILLS = [
@@ -424,6 +493,31 @@ def admin_list_check_storage_sync(dsn: str, admin_user_id: int, is_admin: bool) 
             return out
 
 
+def _resolve_large_workbook_sheet(
+    large_wb: openpyxl.Workbook, large_sheet: str
+) -> tuple[openpyxl.worksheet.worksheet.Worksheet, str | None]:
+    """
+    Choose which worksheet to import from the large file.
+    If the client passes a valid sheet name, use it.
+    If the workbook has multiple sheets and no valid name was given, use the first sheet only.
+    If there is a single sheet, use find_best_sheet (plate column heuristic).
+    Returns (worksheet, optional Arabic note for the API/UI).
+    """
+    names = list(large_wb.sheetnames)
+    if not names:
+        raise ValueError("الملف الكبير لا يحتوي ورق عمل")
+    ls = (large_sheet or "").strip()
+    if ls and ls in names:
+        return large_wb[ls], None
+    if len(names) > 1:
+        first = names[0]
+        note = (
+            f"الملف يحتوي {len(names)} ورقة؛ تم استيراد الورقة الأولى فقط («{first}»)."
+        )
+        return large_wb[first], note
+    return find_best_sheet(large_wb), None
+
+
 def import_large_workbook_sync(
     dsn: str,
     user_id: int,
@@ -441,15 +535,8 @@ def import_large_workbook_sync(
     fname = _safe_filename(source_filename)
     large_wb = load_workbook_maybe_encrypted(lc_bytes, password)
     try:
-        if len(large_wb.sheetnames) != 1:
-            raise ValueError(
-                "يجب أن يحتوي الملف الكبير على ورقة عمل واحدة فقط. "
-                f"الموجود: {len(large_wb.sheetnames)} ({', '.join(large_wb.sheetnames)})"
-            )
-        large_ws = (
-            large_wb[large_sheet]
-            if large_sheet and large_sheet in large_wb.sheetnames
-            else find_best_sheet(large_wb)
+        large_ws, sheet_selection_note = _resolve_large_workbook_sheet(
+            large_wb, large_sheet
         )
         lrows = list(large_ws.iter_rows(values_only=True))
         if not lrows:
@@ -555,7 +642,7 @@ def import_large_workbook_sync(
                         (import_id, user_id),
                     )
             raise ValueError("لا توجد صفوف بلوحات صالحة في الملف الكبير")
-        return {
+        out: dict[str, Any] = {
             "row_count": total,
             "headers": lh,
             "sheet_name": large_ws.title,
@@ -563,6 +650,9 @@ def import_large_workbook_sync(
             "import_id": import_id,
             "filename": fname,
         }
+        if sheet_selection_note:
+            out["sheet_selection_note"] = sheet_selection_note
+        return out
     finally:
         try:
             large_wb.close()
@@ -576,6 +666,71 @@ def _cell_display(v: Any) -> Any:
     return v
 
 
+def _parse_row_data_dict(rd: Any) -> dict[str, Any]:
+    """Normalize JSONB row_data to a str-keyed dict for reliable column lookups."""
+    if rd is None:
+        return {}
+    if isinstance(rd, dict):
+        return {str(k) if k is not None else "": v for k, v in rd.items()}
+    if isinstance(rd, str):
+        try:
+            o = json.loads(rd)
+            return _parse_row_data_dict(o)
+        except Exception:
+            return {}
+    return {}
+
+
+def _merge_sql_gps_into_row(row_dict: dict[str, Any], gps_sql: Any) -> dict[str, Any]:
+    """
+    check_large_rows stores GPS redundantly in row_data and in column `gps`.
+    If row_data lost/emptied GPS (legacy rows, drivers), copy from `gps`.
+    """
+    d = dict(row_dict)
+    g_sql = str(gps_sql or "").strip()
+    if not g_sql:
+        return d
+    idx = _row_norm_key_index(d)
+    gps_n = _norm_header_sim(GPS_HEADER)
+    gps_key = idx.get(gps_n)
+    cur = d.get(GPS_HEADER)
+    if cur is None and gps_key:
+        cur = d.get(gps_key)
+    cur_s = "" if cur is None else str(cur).strip()
+    if not cur_s:
+        if gps_key:
+            d[gps_key] = g_sql
+        else:
+            d[GPS_HEADER] = g_sql
+    return d
+
+
+def _large_row_get(
+    row_dict: dict[str, Any],
+    col_name: str,
+    norm_index: dict[str, str] | None = None,
+) -> Any:
+    """Lookup cell by export / column_order header; match JSONB keys with Arabic normalization."""
+    if not col_name:
+        return None
+    cn = str(col_name)
+    if cn in row_dict:
+        return row_dict[cn]
+    want = cn.strip().lower()
+    for k, v in row_dict.items():
+        if str(k).strip().lower() == want:
+            return v
+    nk = _norm_header_sim(cn)
+    if not nk:
+        return None
+    if norm_index is None:
+        norm_index = _row_norm_key_index(row_dict)
+    orig = norm_index.get(nk)
+    if orig is not None:
+        return row_dict.get(orig)
+    return None
+
+
 def _fetch_matches_by_import(
     conn, user_id: int, plate_normalized: str
 ) -> dict[int, list[dict[str, Any]]]:
@@ -583,7 +738,7 @@ def _fetch_matches_by_import(
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT import_id, row_data
+            SELECT import_id, row_data, gps
             FROM check_large_rows
             WHERE user_id = %s AND plate_normalized = %s AND import_id IS NOT NULL
             ORDER BY import_id ASC, id ASC
@@ -595,7 +750,10 @@ def _fetch_matches_by_import(
             rd = row.get("row_data")
             if iid is None:
                 continue
-            d = rd if isinstance(rd, dict) else json.loads(rd) if isinstance(rd, str) else rd
+            d = _merge_sql_gps_into_row(
+                _parse_row_data_dict(rd),
+                row.get("gps"),
+            )
             out[int(iid)].append(d)
     return out
 
@@ -735,7 +893,6 @@ def run_check_plates_postgres_sync(
         se_idx = [sh.index(c) for c in se_cols]
         sci = sh.index(sc)
 
-        plate_title = "رقم اللوحة (المطابقة)"
         header_font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
         body_font = Font(name="Arial", size=10, color="000000")
         body_fill_large = PatternFill("solid", start_color="DBEAFE")
@@ -753,6 +910,7 @@ def run_check_plates_postgres_sync(
         row = 1
 
         preview_rows: list[list[str]] = []
+        preview_sections: list[dict[str, Any]] = []
         matched_rows_count = 0
         matched_plate_hits = 0
         unmatched_plates = 0
@@ -769,6 +927,8 @@ def run_check_plates_postgres_sync(
                 }
             imp_by_id = {i["id"]: i for i in imports}
 
+            # Pass 1: read small file and fetch matches (preserve small-file row order).
+            small_entries: list[dict[str, Any]] = []
             for srow in itertools.chain((r for r in (row2, row3) if r is not None), srows):
                 if all(v is None for v in srow):
                     continue
@@ -785,38 +945,60 @@ def run_check_plates_postgres_sync(
                 plate_disp = str(rp).strip() if rp is not None else norm
                 if len(groups) > 1:
                     multi_file_notes.append((norm, plate_disp, small_vals, dict(groups)))
+                small_entries.append(
+                    {
+                        "norm": norm,
+                        "plate_disp": plate_disp,
+                        "small_vals": small_vals,
+                        "groups": groups,
+                    }
+                )
 
-                for imp in imports:
-                    iid = imp["id"]
-                    lst = groups.get(iid) or []
+            # Pass 2: for each large-file import in order, emit all matching rows for that
+            # file only — avoids interleaving sections so rows stay under the correct file.
+            for imp in imports:
+                iid = imp["id"]
+                lh = [
+                    str(h).strip()
+                    for h in (imp.get("column_order") or [])
+                    if h is not None and str(h).strip()
+                ]
+                if not lh:
+                    lh = list(union_headers)
+                sec_le = _map_export_headers_to_sheet(
+                    list(large_export_cols or []), lh
+                )
+                if not sec_le:
+                    sec_le = _norm_large_export_cols(
+                        list(large_export_cols or []), union_headers
+                    )
+                if not sec_le:
+                    sec_le = list(union_headers)
+                for ent in small_entries:
+                    lst = ent["groups"].get(iid) or []
                     if not lst:
                         continue
-                    lh = imp["column_order"]
-                    sec_le = _norm_large_export_cols(list(large_export_cols or []), lh)
+                    small_vals = ent["small_vals"]
                     if not section_started.get(iid):
                         color_hex = FILE_SECTION_HEADER_FILLS[
                             imports.index(imp) % len(FILE_SECTION_HEADER_FILLS)
                         ]
                         title_fill = PatternFill("solid", start_color=color_hex)
-                        cell = ws.cell(row=row, column=1, value=f"📁 {imp['filename']}")
+                        sn = (imp.get("sheet_name") or "").strip()
+                        title_txt = f"📁 {imp['filename']}"
+                        if sn:
+                            title_txt = f"{title_txt} — ورقة: {sn}"
+                        cell = ws.cell(row=row, column=1, value=title_txt)
                         cell.fill = title_fill
                         cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
                         cell.border = border
                         row += 1
-                        hdr_vals = (
-                            [plate_title]
-                            + [
-                                _strip_small_word_from_header_title(c) for c in sec_le
-                            ]
-                            + [
-                                _strip_small_word_from_header_title(c) for c in se_cols
-                            ]
-                        )
-                        hdr_src = (
-                            ["plate"]
-                            + ["large"] * len(sec_le)
-                            + ["small"] * len(se_cols)
-                        )
+                        hdr_vals = [
+                            _strip_small_word_from_header_title(c) for c in sec_le
+                        ] + [
+                            _strip_small_word_from_header_title(c) for c in se_cols
+                        ]
+                        hdr_src = ["large"] * len(sec_le) + ["small"] * len(se_cols)
                         hdr_colors = [color_hex] * len(hdr_vals)
                         row = _write_row(
                             ws,
@@ -835,11 +1017,26 @@ def run_check_plates_postgres_sync(
                             col_sources=hdr_src,
                         )
                         section_started[iid] = True
+                        title_ui = (imp.get("filename") or "").strip() or "ملف"
+                        if sn:
+                            title_ui = f"{title_ui} — ورقة: {sn}"
+                        preview_sections.append(
+                            {
+                                "title": title_ui,
+                                "headers": [str(h) if h is not None else "" for h in hdr_vals],
+                                "col_sources": list(hdr_src),
+                                "rows": [],
+                            }
+                        )
 
                     for ld in lst:
-                        large_vals = [_cell_display(ld.get(c)) for c in sec_le]
-                        row_vals = [plate_disp] + large_vals + small_vals
-                        row_src = ["plate"] + ["large"] * len(sec_le) + ["small"] * len(se_cols)
+                        nidx = _row_norm_key_index(ld)
+                        large_vals = [
+                            _cell_display(_large_row_get(ld, c, nidx))
+                            for c in sec_le
+                        ]
+                        row_vals = large_vals + small_vals
+                        row_src = ["large"] * len(sec_le) + ["small"] * len(se_cols)
                         row = _write_row(
                             ws,
                             row,
@@ -858,9 +1055,12 @@ def run_check_plates_postgres_sync(
                         )
                         matched_rows_count += 1
                         if len(preview_rows) < PREVIEW_MAX_ROWS:
-                            preview_rows.append(
-                                ["" if v is None else str(v).strip() for v in row_vals]
-                            )
+                            pr = [
+                                "" if v is None else str(v).strip() for v in row_vals
+                            ]
+                            preview_rows.append(pr)
+                            if preview_sections:
+                                preview_sections[-1]["rows"].append(pr)
 
             if multi_file_notes:
                 row += 1
@@ -930,16 +1130,11 @@ def run_check_plates_postgres_sync(
                 },
             }
 
-        display_headers = (
-            [plate_title]
-            + [_strip_small_word_from_header_title(c) for c in _norm_large_export_cols(list(large_export_cols or []), union_headers)]
-            + [_strip_small_word_from_header_title(c) for c in se_cols]
-        )
-        col_sources_preview = (
-            ["plate"]
-            + ["large"] * len(_norm_large_export_cols(list(large_export_cols or []), union_headers))
-            + ["small"] * len(se_cols)
-        )
+        le_preview = _norm_large_export_cols(list(large_export_cols or []), union_headers)
+        display_headers = [
+            _strip_small_word_from_header_title(c) for c in le_preview
+        ] + [_strip_small_word_from_header_title(c) for c in se_cols]
+        col_sources_preview = ["large"] * len(le_preview) + ["small"] * len(se_cols)
 
         content = workbook_to_bytes(wb)
         ts = datetime.now().strftime("%Y%m%d_%H%M")
@@ -952,6 +1147,7 @@ def run_check_plates_postgres_sync(
                 "headers": display_headers,
                 "col_sources": col_sources_preview,
                 "rows": preview_rows,
+                "sections": preview_sections,
                 "total_rows": matched_rows_count,
                 "truncated": matched_rows_count > PREVIEW_MAX_ROWS,
                 "stats": {
@@ -1028,7 +1224,10 @@ def collect_gps_vehicles_stored_sync(
                 for iid, rds in groups.items():
                     fn = imp_name.get(iid, "")
                     for ld in rds:
-                        gps = str(ld.get(gps_col) or "").strip()
+                        nix = _row_norm_key_index(ld)
+                        gps = str(
+                            _large_row_get(ld, gps_col or "", nix) or ""
+                        ).strip()
                         plate = str(rp or "").strip()
                         key = (plate, gps, fn)
                         if key in seen:
@@ -1038,9 +1237,26 @@ def collect_gps_vehicles_stored_sync(
                             {
                                 "plate": plate,
                                 "gps": gps,
-                                "date": str(ld.get(date_col) or "").strip() if date_col else "",
-                                "vehicle_type": str(ld.get(type_col) or "").strip() if type_col else "",
-                                "notes": (str(ld.get(notes_col) or "").strip() if notes_col else "")
+                                "date": str(
+                                    _large_row_get(ld, date_col or "", nix) or ""
+                                ).strip()
+                                if date_col
+                                else "",
+                                "vehicle_type": str(
+                                    _large_row_get(ld, type_col or "", nix) or ""
+                                ).strip()
+                                if type_col
+                                else "",
+                                "notes": (
+                                    str(
+                                        _large_row_get(
+                                            ld, notes_col or "", nix
+                                        )
+                                        or ""
+                                    ).strip()
+                                    if notes_col
+                                    else ""
+                                )
                                 + (f" [{fn}]" if fn else ""),
                             }
                         )
@@ -1071,3 +1287,197 @@ def collect_gps_vehicles_stored_sync(
             small_wb.close()
         except Exception:
             pass
+
+
+# ── Admin: browse / export check_large_* (RLS bypass via is_admin) ───────────
+
+ADMIN_IMPORT_PREVIEW_MAX = 200
+ADMIN_IMPORT_PAGE_MAX = 500
+
+
+def admin_list_imports_detailed_sync(
+    dsn: str, admin_user_id: int, is_admin: bool
+) -> list[dict[str, Any]]:
+    if not is_admin:
+        return []
+    ensure_check_pg_schema(dsn)
+    with check_pg_tx(dsn, admin_user_id, True) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT i.id AS import_id,
+                       i.user_id AS user_id,
+                       i.filename AS filename,
+                       i.sheet_name AS sheet_name,
+                       i.plate_column AS plate_column,
+                       i.created_at AS created_at,
+                       COUNT(r.id)::bigint AS row_count
+                FROM check_large_imports i
+                LEFT JOIN check_large_rows r ON r.import_id = i.id AND r.user_id = i.user_id
+                GROUP BY i.id, i.user_id, i.filename, i.sheet_name, i.plate_column, i.created_at
+                ORDER BY i.created_at DESC NULLS LAST, i.id DESC
+                """
+            )
+            out: list[dict[str, Any]] = []
+            for r in cur.fetchall():
+                out.append(
+                    {
+                        "import_id": int(r["import_id"]),
+                        "user_id": int(r["user_id"]),
+                        "filename": r.get("filename") or "",
+                        "sheet_name": r.get("sheet_name") or "",
+                        "plate_column": r.get("plate_column") or "",
+                        "row_count": int(r["row_count"] or 0),
+                        "created_at": r["created_at"].isoformat()
+                        if r.get("created_at")
+                        else None,
+                    }
+                )
+            return out
+
+
+def admin_get_import_meta_sync(
+    dsn: str, admin_user_id: int, is_admin: bool, import_id: int
+) -> dict[str, Any] | None:
+    if not is_admin or import_id <= 0:
+        return None
+    ensure_check_pg_schema(dsn)
+    with check_pg_tx(dsn, admin_user_id, True) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id, user_id, filename, sheet_name, plate_column, column_order
+                FROM check_large_imports
+                WHERE id = %s
+                """,
+                (import_id,),
+            )
+            r = cur.fetchone()
+            if not r:
+                return None
+            co = r["column_order"]
+            if isinstance(co, str):
+                co = json.loads(co)
+            cols = list(co) if co else []
+            return {
+                "import_id": int(r["id"]),
+                "user_id": int(r["user_id"]),
+                "filename": r.get("filename") or "",
+                "sheet_name": r.get("sheet_name") or "",
+                "plate_column": r.get("plate_column") or "",
+                "column_order": cols,
+            }
+
+
+def admin_list_import_rows_page_sync(
+    dsn: str,
+    admin_user_id: int,
+    is_admin: bool,
+    import_id: int,
+    offset: int,
+    limit: int,
+) -> tuple[list[dict[str, Any]], int]:
+    if not is_admin or import_id <= 0:
+        return [], 0
+    limit = max(1, min(int(limit or 20), ADMIN_IMPORT_PAGE_MAX))
+    offset = max(0, int(offset or 0))
+    ensure_check_pg_schema(dsn)
+    with check_pg_tx(dsn, admin_user_id, True) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT COUNT(*)::bigint AS cnt FROM check_large_rows WHERE import_id = %s",
+                (import_id,),
+            )
+            total = int(cur.fetchone()["cnt"] or 0)
+            cur.execute(
+                """
+                SELECT id, plate_normalized, row_data, gps
+                FROM check_large_rows
+                WHERE import_id = %s
+                ORDER BY id ASC
+                LIMIT %s OFFSET %s
+                """,
+                (import_id, limit, offset),
+            )
+            rows: list[dict[str, Any]] = []
+            for row in cur.fetchall():
+                rd = row.get("row_data")
+                if isinstance(rd, str):
+                    try:
+                        rd = json.loads(rd)
+                    except Exception:
+                        rd = {"_raw": rd}
+                elif rd is not None and not isinstance(rd, dict):
+                    rd = {"_value": str(rd)}
+                rows.append(
+                    {
+                        "id": int(row["id"]),
+                        "plate_normalized": row.get("plate_normalized") or "",
+                        "gps": row.get("gps") or "",
+                        "row_data": rd if isinstance(rd, dict) else {},
+                    }
+                )
+            return rows, total
+
+
+def admin_write_import_csv_tempfile_sync(
+    dsn: str, admin_user_id: int, is_admin: bool, import_id: int
+) -> tuple[str, str]:
+    """Write UTF-8 CSV with BOM to a temp path. Returns (path, safe_filename)."""
+    if not is_admin or import_id <= 0:
+        raise ValueError("invalid export")
+    meta = admin_get_import_meta_sync(dsn, admin_user_id, is_admin, import_id)
+    if not meta:
+        raise ValueError("import not found")
+    headers = ["id", "plate_normalized", "gps"] + list(meta.get("column_order") or [])
+    base = _safe_filename(meta.get("filename") or f"import_{import_id}")
+    if base.lower().endswith(".xlsx"):
+        base = base[:-5]
+    out_name = f"{base}_user{meta['user_id']}_import{import_id}.csv"
+
+    ensure_check_pg_schema(dsn)
+    fd, path = tempfile.mkstemp(suffix=".csv", prefix="check_export_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(headers)
+            batch = 8000
+            with check_pg_tx(dsn, admin_user_id, True) as conn:
+                with conn.cursor(row_factory=dict_row) as cur:
+                    cur.execute(
+                        """
+                        SELECT id, plate_normalized, row_data, gps
+                        FROM check_large_rows
+                        WHERE import_id = %s
+                        ORDER BY id ASC
+                        """,
+                        (import_id,),
+                    )
+                    while True:
+                        chunk = cur.fetchmany(batch)
+                        if not chunk:
+                            break
+                        for row in chunk:
+                            rd = row.get("row_data")
+                            if isinstance(rd, str):
+                                try:
+                                    rd = json.loads(rd)
+                                except Exception:
+                                    rd = {}
+                            elif not isinstance(rd, dict):
+                                rd = {}
+                            vals: list[Any] = [
+                                int(row["id"]),
+                                row.get("plate_normalized") or "",
+                                row.get("gps") or "",
+                            ]
+                            for h in meta.get("column_order") or []:
+                                vals.append(_cell_display(rd.get(h)))
+                            w.writerow(vals)
+        return path, out_name
+    except Exception:
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
+        raise

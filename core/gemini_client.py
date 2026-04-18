@@ -22,13 +22,27 @@ GEMINI_WS_URL = (
 
 # English-only instructions for the Live model (systemInstruction.parts).
 SYSTEM_INSTRUCTION = (
-    "You extract Arabic car plate text from speech. "
-    "Return JSON only. "
-    "Do not explain. Do not add words. Do not normalize linguistically. "
-    "Assume the user speaks plate letters one-by-one (not words). "
-    "Treat any spoken letter name as the single Arabic letter (e.g., 'راء' or 'ره' => 'ر')."
+    "You extract Egyptian/Arabic license plates from spoken Arabic audio. "
+    "Return JSON ONLY (per SYSTEM_PROMPT). No markdown, no prose, no extra keys. "
+    "The user usually spells letters one-by-one, then digits, e.g. 'و ص ر 3424'. "
+    "If you hear Arabic letter names (واو/صاد/راء/حاء/هاء/عين/غين/قاف/كاف/...), map each to exactly ONE Arabic plate letter. "
+    "Never output Latin letters in JSON (no 'h' etc.). If audio sounds like an English letter name, treat it as an Arabic letter-name cue, not Latin text. "
+    "Do NOT expand a spoken letter into a full Arabic word in the output (e.g. never output 'الف' instead of 'ا'). "
+    "If audio is ambiguous/low confidence, return {\"plate\":null} instead of guessing. "
+    "Each user/model turn is independent: do not carry over or repeat a plate from an earlier turn unless clearly re-spoken in the current turn. "
+    "Plate constraints are strict: letters must never exceed 3 Arabic letters, digits must never exceed 4 numbers. "
+    "Preferred format is 3 letters + 4 digits when clearly heard. "
+    "Never output letter-name words for plate letters (e.g. do not output 'عين' or 'عن'; output single letter 'ع'). "
+    "\n"
+    "تثبيت أخطاء شائعة في النطق (لو سمعت الاسم، اختر الحرف الصحيح للوحة): "
+    "حاء/حا/حه => ح (وليس ه). "
+    "هاء/ها/هه => ه (وليس ح). "
+    "عين/عاين => ع (وليس غ ولا ق). "
+    "غين/غاين => غ (وليس ع). "
+    "قاف => ق (وليس ك). "
+    "كاف => ك (وليس ق)."
 )
-    
+
 SYSTEM_PROMPT = """Output must be ONLY one of:
 {"plate":"<letters> <digits>"}
 {"plates":[{"plate":"<letters> <digits>"}, ...]}
@@ -41,24 +55,17 @@ Rules:
 4) Letters block then one ASCII space then digits block.
 5) Digits must be Western 0-9 only.
 6) No markdown, no extra keys, no extra text.
+7) The letters block must contain Arabic letters ONLY (Unicode Arabic letters). Never output Latin letters.
+8) Letters count must be 1..3 (preferred 3). Never output >3 letters.
+9) Digits count must be 1..4 (preferred 4). Never output >4 digits.
+10) If you hear a letter name, convert it to one Arabic character only (e.g. عين/عن -> ع).
 
 Valid example: {"plate":"وصر 4923"}"""
 
-# Live model IDs change; use env to override without code edits.
-# If you see WebSocket 1011 on connect, try another ID from https://ai.google.dev/gemini-api/docs/models
-_DEFAULT_LIVE_MODELS = (
-    "models/gemini-3.1-flash-live",
-    "models/gemini-3.1-flash-live-preview",
-    "models/gemini-2.5-flash-native-audio-preview-12-2025",
-)
+# Live-capable model IDs come only from the admin Gemini catalog (channel=live);
+# the WebSocket client sends the chosen model_id after /api/config/gemini-models.
 _LIVE_VOICE = os.getenv("GEMINI_LIVE_VOICE", "Kore")
 
-
-def _live_model_candidates() -> list[str]:
-    single = (os.getenv("GEMINI_LIVE_MODEL") or "").strip()
-    if single:
-        return [single]
-    return list(_DEFAULT_LIVE_MODELS)
 
 class GeminiLiveSession:
     """Thin wrapper around a raw WebSocket to Gemini Live."""
@@ -156,39 +163,33 @@ async def _try_connect_one(api_key: str, model: str) -> GeminiLiveSession:
         raise
 
 
-async def _try_connect(api_key: str) -> GeminiLiveSession:
-    last_err: Exception | None = None
-    for model in _live_model_candidates():
-        try:
-            return await _try_connect_one(api_key, model)
-        except websockets.exceptions.ConnectionClosedError as e:
-            last_err = e
-            logger.warning(
-                "Live WS closed during setup model=%s code=%s reason=%s",
-                model,
-                getattr(e, "code", None),
-                getattr(e, "reason", None) or str(e),
-            )
-        except Exception as e:
-            last_err = e
-            logger.warning("Live setup failed model=%s: %s", model, e)
-    raise RuntimeError(
-        "Could not start Gemini Live session. "
-        "Set GEMINI_LIVE_MODEL to a valid Live model from "
-        "https://ai.google.dev/gemini-api/docs/models — last error: "
-        f"{last_err!r}"
-    ) from last_err
-
-
 @asynccontextmanager
-async def create_gemini_session(api_key: str | None = None):
-    key = (api_key or "").strip() or os.getenv("GEMINI_API_KEY", "")
+async def create_gemini_session(
+    api_key: str | None = None,
+    live_model: str | None = None,
+):
+    """Connect to Gemini Live using the single model id chosen by the client (admin catalog)."""
+    key = (api_key or "").strip()
     if not key:
-        raise ValueError("GEMINI API key missing (init message or GEMINI_API_KEY in .env)")
+        raise ValueError("GEMINI API key missing")
 
-    candidates = _live_model_candidates()
-    logger.info("Connecting Live (candidates=%s)", candidates)
-    session = await _try_connect(key)
+    primary = (live_model or "").strip()
+    if not primary:
+        raise ValueError(
+            "live_model is required — add enabled Live models in admin and pick one in the UI."
+        )
+
+    try:
+        session = await _try_connect_one(key, primary)
+    except Exception as e:
+        logger.warning("Live connect failed model=%s: %s", primary, e)
+        raise RuntimeError(
+            f"Could not start Gemini Live session for model {primary!r}. "
+            f"Error: {e!r}"
+        ) from e
+
+    logger.info("Connected Live model=%s", primary)
+
     try:
         yield session
     finally:
