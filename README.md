@@ -77,6 +77,10 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - Health: `GET http://127.0.0.1:8000/health`
 - Docs: `http://127.0.0.1:8000/docs`
 
+### Redis (multiple workers / production)
+
+Set `REDIS_URL` for shared job queues across Gunicorn or uvicorn workers, and for **provider API key pools** (Gemini, ORS, Google Maps). Keys are added only from the Admin UI after Redis is available — not from `.env` or a JSON file. See `.env.example`.
+
 ## API Endpoints
 
 ### Auth

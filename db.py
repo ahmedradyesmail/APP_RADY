@@ -28,7 +28,7 @@ def apply_sqlite_migrations() -> None:
                 # Concurrent workers may both attempt ALTER; second sees column already added.
                 if "duplicate column" not in str(getattr(e, "orig", None) or e).lower():
                     raise
-        # Keys moved to data/provider_keys.json — drop legacy table if present.
+        # Provider keys moved to Redis pools — drop legacy table if present.
         try:
             conn.execute(text("DROP TABLE IF EXISTS provider_api_key_settings"))
         except OperationalError:

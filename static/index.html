@@ -1003,26 +1003,36 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   </div>
 
   <div class="panel teal-accent">
-    <div class="ptitle teal">&#x1F511; مفاتيح API (Gemini / ORS / Maps)</div>
-    <p style="font-size:.72rem;color:var(--dim2);margin:0 0 .65rem;line-height:1.5">ما يظهر في الخانات هو ما يُستخدم على السيرفر كله بعد «حفظ». خانة فارغة = لا مفتاح لهذا النوع في الذاكرة. بعد إعادة تشغيل السيرفر أعد الإدخال.</p>
-    <div style="display:grid;gap:.55rem;max-width:560px">
-      <div>
-        <label class="lbl">Gemini API</label>
-        <input type="text" id="admKeyGemini" autocomplete="off" spellcheck="false" placeholder="" style="width:100%;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+    <div class="ptitle teal">&#x1F511; مفاتيح API (Redis — دوران تلقائي)</div>
+    <p style="font-size:.72rem;color:var(--dim2);margin:0 0 .65rem;line-height:1.55">يُخزَّن كل مفتاح في <strong>Redis</strong> (متغير <code style="font-size:.68rem">REDIS_URL</code>). الترتيب: دوران بين المفاتيح لكل طلب؛ عند <strong>429</strong> يُعلَّق المفتاح حتى منتصف الليل UTC؛ عند مفتاح <strong>غير صالح</strong> يُحذف تلقائياً.</p>
+    <p id="admPoolRedisHint" style="font-size:.72rem;color:var(--amber);margin:0 0 .55rem"></p>
+    <div style="display:grid;gap:1rem;max-width:900px">
+      <div class="panel" style="margin:0;padding:.85rem">
+        <div class="lbl" style="font-weight:800;margin-bottom:.45rem">Gemini</div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
+          <input type="password" id="admPoolInGemini" autocomplete="new-password" placeholder="مفتاح جديد" style="flex:1;min-width:200px;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+          <button type="button" class="tb-btn primary" onclick="adminAddPoolKey('gemini')">&#x2795; إضافة</button>
+        </div>
+        <div class="tbl-outer" style="max-height:160px;overflow:auto"><table style="font-size:.74rem;width:100%"><thead><tr><th>المعرّف</th><th>مختصر</th><th>الحالة</th><th></th></tr></thead><tbody id="admPoolGeminiBody"></tbody></table></div>
       </div>
-      <div>
-        <label class="lbl">OpenRouteService</label>
-        <input type="text" id="admKeyOrs" autocomplete="off" spellcheck="false" placeholder="" style="width:100%;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+      <div class="panel" style="margin:0;padding:.85rem">
+        <div class="lbl" style="font-weight:800;margin-bottom:.45rem">OpenRouteService (ORS)</div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
+          <input type="password" id="admPoolInOrs" autocomplete="new-password" placeholder="مفتاح جديد" style="flex:1;min-width:200px;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+          <button type="button" class="tb-btn primary" onclick="adminAddPoolKey('ors')">&#x2795; إضافة</button>
+        </div>
+        <div class="tbl-outer" style="max-height:160px;overflow:auto"><table style="font-size:.74rem;width:100%"><thead><tr><th>المعرّف</th><th>مختصر</th><th>الحالة</th><th></th></tr></thead><tbody id="admPoolOrsBody"></tbody></table></div>
       </div>
-      <div>
-        <label class="lbl">Google Maps (JavaScript)</label>
-        <input type="text" id="admKeyGmaps" autocomplete="off" spellcheck="false" placeholder="" style="width:100%;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+      <div class="panel" style="margin:0;padding:.85rem">
+        <div class="lbl" style="font-weight:800;margin-bottom:.45rem">Google Maps (JavaScript API)</div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.5rem">
+          <input type="password" id="admPoolInGmaps" autocomplete="new-password" placeholder="مفتاح جديد" style="flex:1;min-width:200px;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.72rem"/>
+          <button type="button" class="tb-btn primary" onclick="adminAddPoolKey('gmaps')">&#x2795; إضافة</button>
+        </div>
+        <div class="tbl-outer" style="max-height:160px;overflow:auto"><table style="font-size:.74rem;width:100%"><thead><tr><th>المعرّف</th><th>مختصر</th><th>الحالة</th><th></th></tr></thead><tbody id="admPoolGmapsBody"></tbody></table></div>
       </div>
     </div>
-    <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-      <button type="button" class="tb-btn primary" onclick="adminSaveApiKeys()">حفظ المفاتيح</button>
-      <span id="admKeyStatus" style="font-size:.72rem;color:var(--dim2)"></span>
-    </div>
+    <div style="margin-top:.55rem"><span id="admKeyStatus" style="font-size:.72rem;color:var(--dim2)"></span></div>
   </div>
 
   <div class="panel violet-accent">
@@ -3489,7 +3499,7 @@ function applyAdminNavVisibility(){
       if(typeof window.adminLoadUsers==='function') window.adminLoadUsers();
       try{ if(typeof refreshUserGeminiModels==='function') void refreshUserGeminiModels(); }catch(_){}
       if(typeof window.adminLoadGeminiModelsAdmin==='function') window.adminLoadGeminiModelsAdmin();
-      if(typeof window.adminLoadApiKeys==='function') window.adminLoadApiKeys();
+      if(typeof window.adminLoadKeyPools==='function') window.adminLoadKeyPools();
       return;
     }
     const ap=document.getElementById('pageAdmin'); if(ap) ap.style.display='none';
@@ -3579,33 +3589,71 @@ function applyAdminNavVisibility(){
     }catch(e){ if(m){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; } }
   };
 
-  window.adminLoadApiKeys=async function(){
+  function _admPoolStatusLabel(row){
+    if(row.status==='parked_quota'){
+      const ts=row.parked_until_ts;
+      if(ts) try{ return '\u23F3 موقوف حصة حتى '+new Date(ts*1000).toISOString().slice(0,16)+' UTC'; }catch(_e){ return '\u23F3 موقوف حصة'; }
+      return '\u23F3 موقوف حصة';
+    }
+    if(row.status==='orphan') return '\u26A0 يتيم';
+    return '\u2714 نشط';
+  }
+  function _admRenderPoolRows(kind, rows){
+    const map={gemini:'admPoolGeminiBody',ors:'admPoolOrsBody',gmaps:'admPoolGmapsBody'};
+    const tb=document.getElementById(map[kind]);
+    if(!tb) return;
+    tb.innerHTML=(rows||[]).map(function(row){
+      const id=String(row.id||'');
+      return '<tr><td style="font-family:var(--mono);font-size:.65rem">'+esc(id.slice(0,8))+'…</td><td>'+esc(String(row.masked||''))+'</td><td>'+esc(_admPoolStatusLabel(row))+'</td><td><button type="button" class="tb-btn danger" style="padding:.2rem .45rem;font-size:.68rem" onclick="adminDeletePoolKey(\''+kind+'\',\''+id.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">\u2715</button></td></tr>';
+    }).join('')||( '<tr><td colspan="4" style="color:var(--dim2);font-size:.72rem">لا مفاتيح</td></tr>');
+  }
+  window.adminDeletePoolKey=async function(kind,keyId){
+    if(!keyId||!confirm('\u062D\u0630\u0641 \u0647\u0630\u0627 \u0627\u0644\u0645\u0641\u062A\u0627\u062D\u061F')) return;
     const st=document.getElementById('admKeyStatus');
     try{
-      const r=await fetch('/admin/provider/api-keys');
+      const r=await fetch('/admin/provider/key-pools/'+encodeURIComponent(kind)+'/keys/'+encodeURIComponent(keyId),{method:'DELETE'});
       const j=await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error(j.detail||'فشل تحميل المفاتيح');
-      const g=document.getElementById('admKeyGemini'); if(g) g.value=typeof j.gemini_api_key==='string'?j.gemini_api_key:'';
-      const o=document.getElementById('admKeyOrs'); if(o) o.value=typeof j.ors_api_key==='string'?j.ors_api_key:'';
-      const m=document.getElementById('admKeyGmaps'); if(m) m.value=typeof j.gmaps_api_key==='string'?j.gmaps_api_key:'';
-      if(st) st.textContent='تم التحميل — ما في الخانات هو المفعّل على السيرفر بعد آخر حفظ.';
-    }catch(e){ if(st) st.textContent=e.message||'فشل'; }
+      if(!r.ok) throw new Error(j.detail||'\u0641\u0634\u0644 \u0627\u0644\u062D\u0630\u0641');
+      if(st) st.textContent='\u062A\u0645 \u0627\u0644\u062D\u0630\u0641';
+      await window.adminLoadKeyPools();
+    }catch(e){ if(st) st.textContent=e.message||'\u0641\u0634\u0644'; }
   };
-
-  window.adminSaveApiKeys=async function(){
+  window.adminAddPoolKey=async function(kind){
+    const inpId='admPoolIn'+(kind==='gemini'?'Gemini':kind==='ors'?'Ors':'Gmaps');
+    const inp=document.getElementById(inpId);
     const st=document.getElementById('admKeyStatus');
-    const g=(document.getElementById('admKeyGemini')||{}).value||'';
-    const o=(document.getElementById('admKeyOrs')||{}).value||'';
-    const m=(document.getElementById('admKeyGmaps')||{}).value||'';
-    const body={gemini_api_key:g,ors_api_key:o,gmaps_api_key:m};
+    const v=(inp&&inp.value||'').trim();
+    if(!v){ if(st) st.textContent='\u0627\u0644\u0635\u0642 \u0645\u0641\u062A\u0627\u062D\u0627\u064B'; return; }
     try{
-      const r=await fetch('/admin/provider/api-keys',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const r=await fetch('/admin/provider/key-pools/'+encodeURIComponent(kind)+'/keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:v})});
       const j=await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error(j.detail||'فشل الحفظ');
-      if(st) st.textContent='تم الحفظ — السيرفر يستخدم الآن القيم المعروضة في الخانات.';
-      await window.adminLoadApiKeys();
-    }catch(e){ if(st) st.textContent=e.message||'فشل'; }
+      if(!r.ok) throw new Error(j.detail||'\u0641\u0634\u0644 \u0627\u0644\u0625\u0636\u0627\u0641\u0629');
+      if(inp) inp.value='';
+      if(st) st.textContent='\u062A\u0645 \u0627\u0644\u0625\u0636\u0627\u0641\u0629';
+      await window.adminLoadKeyPools();
+    }catch(e){ if(st) st.textContent=e.message||'\u0641\u0634\u0644'; }
   };
+  window.adminLoadKeyPools=async function(){
+    const st=document.getElementById('admKeyStatus');
+    const rh=document.getElementById('admPoolRedisHint');
+    try{
+      const r=await fetch('/admin/provider/key-pools');
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'\u0641\u0634\u0644 \u0627\u0644\u062A\u062D\u0645\u064A\u0644');
+      if(rh){
+        if(j.redis===false){ rh.textContent=j.detail||'Redis \u063A\u064A\u0631 \u0645\u062A\u0635\u0644 — \u0639\u064A\u0651\u0646 REDIS_URL.'; }
+        else{ rh.textContent='\u2705 Redis \u0645\u062A\u0635\u0644'; rh.style.color='var(--teal)'; }
+      }
+      _admRenderPoolRows('gemini',j.gemini);
+      _admRenderPoolRows('ors',j.ors);
+      _admRenderPoolRows('gmaps',j.gmaps);
+      if(st) st.textContent='\u062A\u0645 \u062A\u062D\u062F\u064A\u062B \u0642\u0648\u0627\u0626\u0645 \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D.';
+    }catch(e){
+      if(rh) rh.textContent='';
+      if(st) st.textContent=e.message||'\u0641\u0634\u0644';
+    }
+  };
+  window.adminLoadApiKeys=function(){ return window.adminLoadKeyPools(); };
 
   window.adminSetActive=async function(id,active){
     const m=document.getElementById('adminMsg');

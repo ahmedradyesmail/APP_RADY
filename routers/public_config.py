@@ -34,6 +34,6 @@ async def public_maps_js_key(_user: User = Depends(get_current_user)):
     if not key:
         raise HTTPException(
             status_code=503,
-            detail="خدمة الخرائط غير متاحة — أضف مفتاح Google Maps من لوحة الأدمن.",
+            detail="خدمة الخرائط غير متاحة — أضف مفاتيح Maps في Redis من لوحة الأدمن (REDIS_URL).",
         )
     return {"key": key}

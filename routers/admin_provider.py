@@ -1,4 +1,4 @@
-"""Admin: Gemini model catalog, API keys (in-memory only)."""
+"""Admin: Gemini model catalog, API key pools (Redis)."""
 
 import logging
 from typing import Any
@@ -12,7 +12,11 @@ from dependencies.auth import require_admin
 from models import User
 from models.provider_config import GeminiModelCatalog
 from services.gemini_catalog import list_gemini_models_sync
-from services.provider_keys import set_all_keys, snapshot_for_admin
+from services.provider_keys import (
+    admin_add_key,
+    admin_delete_key,
+    admin_list_pools,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +30,8 @@ class GeminiModelCreate(BaseModel):
     sort_order: int = 0
 
 
-class ProviderKeysPayload(BaseModel):
-    gemini_api_key: str = ""
-    ors_api_key: str = ""
-    gmaps_api_key: str = ""
+class KeyAddPayload(BaseModel):
+    value: str = Field(..., min_length=1, max_length=8000)
 
 
 @router.get("/gemini-models")
@@ -81,21 +83,66 @@ async def admin_delete_model(
     return {"deleted": True, "id": model_row_id}
 
 
-@router.get("/api-keys")
-async def admin_get_api_keys(
+@router.get("/key-pools")
+async def admin_get_key_pools(
     _admin: User = Depends(require_admin),
 ) -> dict[str, Any]:
-    return snapshot_for_admin()
+    return admin_list_pools()
+
+
+@router.post("/key-pools/{kind}/keys")
+async def admin_post_key(
+    kind: str,
+    payload: KeyAddPayload,
+    _admin: User = Depends(require_admin),
+):
+    try:
+        return admin_add_key(kind, payload.value)
+    except ValueError as e:
+        msg = str(e)
+        if msg == "redis_unconfigured":
+            raise HTTPException(
+                status_code=503,
+                detail="Redis غير مضبوط — عيّن REDIS_URL في البيئة.",
+            ) from e
+        if msg == "invalid_kind":
+            raise HTTPException(status_code=400, detail="kind must be gemini|ors|gmaps") from e
+        raise HTTPException(status_code=400, detail=msg) from e
+
+
+@router.delete("/key-pools/{kind}/keys/{key_id}")
+async def admin_remove_key(
+    kind: str,
+    key_id: str,
+    _admin: User = Depends(require_admin),
+):
+    try:
+        admin_delete_key(kind, key_id)
+    except ValueError as e:
+        if str(e) == "redis_unconfigured":
+            raise HTTPException(status_code=503, detail="Redis غير مضبوط.") from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"deleted": True}
+
+
+# Deprecated: kept so old clients do not 404
+@router.get("/api-keys")
+async def admin_get_api_keys_deprecated(
+    _admin: User = Depends(require_admin),
+) -> dict[str, str]:
+    return {
+        "gemini_api_key": "",
+        "ors_api_key": "",
+        "gmaps_api_key": "",
+        "message": "استخدم GET /admin/provider/key-pools",
+    }
 
 
 @router.put("/api-keys")
-async def admin_put_api_keys(
-    payload: ProviderKeysPayload,
+async def admin_put_api_keys_deprecated(
     _admin: User = Depends(require_admin),
 ):
-    set_all_keys(
-        payload.gemini_api_key,
-        payload.ors_api_key,
-        payload.gmaps_api_key,
+    raise HTTPException(
+        status_code=410,
+        detail="تم استبدال حفظ المفاتيح — استخدم POST /admin/provider/key-pools/{kind}/keys",
     )
-    return {"ok": True}

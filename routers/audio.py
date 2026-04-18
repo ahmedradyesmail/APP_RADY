@@ -17,7 +17,7 @@ from services.job_store import (
     new_job_id,
     schedule_job_cleanup,
 )
-from services.provider_keys import get_gemini_api_key_sync
+from services.provider_keys import async_gemini_try_all, has_any_gemini_keys
 from services.transcribe_result_storage import (
     schedule_transcribe_file_cleanup,
     transcribe_path_for_job,
@@ -50,13 +50,13 @@ async def _audio_job_task(
 ) -> None:
     async with _audio_job_semaphore:
         try:
-            api_key = get_gemini_api_key_sync()
-            if not api_key:
+            if not has_any_gemini_keys():
                 raise RuntimeError("no_gemini_key")
             plates = None
             model_err_detail: str | None = None
-            try:
-                plates = await process_audio(
+
+            async def _attempt(api_key: str):
+                return await process_audio(
                     file_content=file_content,
                     filename=filename,
                     api_key=api_key,
@@ -65,8 +65,12 @@ async def _audio_job_task(
                     sheet_name=sheet_name,
                     gps_points=gps_points,
                 )
-            except Exception as e:
-                err_text = str(e or "")
+
+            plates, audio_err = await async_gemini_try_all(_attempt)
+            if audio_err is not None and plates is None:
+                err_text = str(audio_err or "")
+                if "no_gemini_key" in err_text or "no_redis" in err_text:
+                    raise RuntimeError("no_gemini_key") from audio_err
                 if (
                     "404" in err_text
                     and "not found" in err_text.lower()
@@ -79,7 +83,7 @@ async def _audio_job_task(
                     logger.warning("Gemini REST model error: %s", err_text[:400])
                 else:
                     logger.exception("Gemini REST failed")
-                    raise RuntimeError("gemini_failed") from e
+                    raise RuntimeError("gemini_failed") from audio_err
 
             if plates is None:
                 if model_err_detail:
@@ -153,10 +157,10 @@ async def process(
             status_code=400,
             detail="موديل REST غير مسموح أو غير مفعّل — اختر من القائمة.",
         )
-    if not get_gemini_api_key_sync():
+    if not has_any_gemini_keys():
         raise HTTPException(
             status_code=503,
-            detail="خدمة التفريغ غير متاحة — أضف مفتاح Gemini من لوحة الأدمن.",
+            detail="خدمة التفريغ غير متاحة — أضف مفتاح Gemini في Redis من لوحة الأدمن (REDIS_URL).",
         )
 
     try:

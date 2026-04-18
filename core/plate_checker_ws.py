@@ -32,7 +32,14 @@ from core.excel_loader import (
 )
 from services.check_temp_storage import temp_plate_exists_sync
 from services.gemini_catalog import is_gemini_model_allowed_sync
-from services.provider_keys import get_gemini_api_key_sync
+from services.provider_key_pool import (
+    delete_key_forever,
+    get_sync_redis,
+    iter_round_robin,
+    park_until_midnight_utc,
+    promote_parked_keys,
+)
+from services.provider_keys import classify_gemini_error
 
 logger = logging.getLogger(__name__)
 
@@ -665,41 +672,54 @@ async def handle_plate_checker_client(websocket: WebSocket, user_id: int, is_adm
             if session is None:
                 raise RuntimeError("Session not initialized")
             connected_live = False
-            api_key = get_gemini_api_key_sync()
-            if api_key:
-                try:
-                    async with create_gemini_session(
-                        api_key, live_model=live_model
-                    ) as gemini_session:
-                        session.genai_session = gemini_session
-                        await _send(websocket, {"type": "ready"})
-                        connected_live = True
+            r = get_sync_redis()
+            if r:
+                promote_parked_keys(r, "gemini")
+                for key_id, api_key in iter_round_robin(r, "gemini"):
+                    try:
+                        async with create_gemini_session(
+                            api_key, live_model=live_model
+                        ) as gemini_session:
+                            session.genai_session = gemini_session
+                            await _send(websocket, {"type": "ready"})
+                            connected_live = True
 
-                        client_task = asyncio.create_task(
-                            handle_client_messages(websocket, session, session_key)
-                        )
-                        gemini_task = asyncio.create_task(
-                            handle_gemini_responses(websocket, session)
-                        )
+                            client_task = asyncio.create_task(
+                                handle_client_messages(websocket, session, session_key)
+                            )
+                            gemini_task = asyncio.create_task(
+                                handle_gemini_responses(websocket, session)
+                            )
 
-                        done, pending = await asyncio.wait(
-                            [client_task, gemini_task],
-                            return_when=asyncio.FIRST_COMPLETED,
-                        )
-                        for t in pending:
-                            t.cancel()
-                            try:
-                                await t
-                            except asyncio.CancelledError:
-                                pass
-                        for t in done:
-                            exc = t.exception()
-                            if exc is not None and not isinstance(
-                                exc, (WebSocketDisconnect, asyncio.CancelledError)
-                            ):
-                                logger.error("Live check task ended with error: %s", exc)
-                except Exception as e:
-                    logger.warning("Live Gemini connect/session failed: %s", e)
+                            done, pending = await asyncio.wait(
+                                [client_task, gemini_task],
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                            for t in pending:
+                                t.cancel()
+                                try:
+                                    await t
+                                except asyncio.CancelledError:
+                                    pass
+                            for t in done:
+                                exc = t.exception()
+                                if exc is not None and not isinstance(
+                                    exc, (WebSocketDisconnect, asyncio.CancelledError)
+                                ):
+                                    logger.error("Live check task ended with error: %s", exc)
+                        break
+                    except Exception as e:
+                        bucket = classify_gemini_error(e)
+                        if bucket == "quota":
+                            park_until_midnight_utc(r, "gemini", key_id)
+                            logger.warning("Live Gemini quota; parked key %s", key_id[:8])
+                            continue
+                        if bucket == "invalid":
+                            delete_key_forever(r, "gemini", key_id)
+                            logger.warning("Live Gemini invalid key removed %s", key_id[:8])
+                            continue
+                        logger.warning("Live Gemini connect/session failed: %s", e)
+                        continue
             if not connected_live:
                 await _send_error(
                     websocket,
