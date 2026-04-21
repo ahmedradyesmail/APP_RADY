@@ -10,6 +10,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import unicodedata
 from datetime import datetime
 from typing import Any
 
@@ -31,6 +32,19 @@ from services.excel_utils import (
 logger = logging.getLogger(__name__)
 
 PREVIEW_MAX_ROWS = 300
+
+
+def _norm_hdr_sim(s: str) -> str:
+    """Matches check_postgres header normalization (اللوحة vs اللوحه)."""
+    t = unicodedata.normalize("NFKC", str(s or ""))
+    for ch in ("\u0640", "\u061c", "\u200c", "\u200d", "\u200e", "\u200f", "\ufeff"):
+        t = t.replace(ch, "")
+    for ch in ("\u0623", "\u0625", "\u0622"):
+        t = t.replace(ch, "\u0627")
+    t = t.replace("\u0629", "\u0647").replace("\u0649", "\u064a")
+    t = re.sub(r"\s+", "", t).strip().lower()
+    return t
+
 
 _SMALL_HDR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^\s*صغير\s*[—–\-]\s*", re.IGNORECASE), ""),
@@ -271,6 +285,16 @@ def run_check_plates_sync(
         ] + [_strip_small_word_from_header_title(c) for c in se_cols]
         col_sources: list[str] = ["large"] * len(le_cols) + ["small"] * len(se_cols)
 
+        lc_n = _norm_hdr_sim(lc)
+        sc_n = _norm_hdr_sim(sc)
+        plate_column_indices: list[int] = []
+        for i, c in enumerate(le_cols):
+            if _norm_hdr_sim(c) == lc_n:
+                plate_column_indices.append(i)
+        for i, c in enumerate(se_cols):
+            if _norm_hdr_sim(c) == sc_n:
+                plate_column_indices.append(len(le_cols) + i)
+
         header_font = Font(name="Arial", bold=True, color="FFFFFF", size=12)
         body_font = Font(name="Arial", size=11, color="000000")
         header_fill_large = PatternFill("solid", start_color="1E40AF")
@@ -306,6 +330,7 @@ def run_check_plates_sync(
                 "title": f"الملف الكبير — ورقة: {large_ws.title}",
                 "headers": list(display_headers),
                 "col_sources": list(col_sources),
+                "plate_column_indices": list(plate_column_indices),
                 "rows": [],
             }
         ]
@@ -379,6 +404,7 @@ def run_check_plates_sync(
             "preview": {
                 "headers": display_headers,
                 "col_sources": col_sources,
+                "plate_column_indices": list(plate_column_indices),
                 "rows": preview_rows,
                 "sections": preview_sections,
                 "total_rows": matched_rows_count,

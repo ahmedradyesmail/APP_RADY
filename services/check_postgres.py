@@ -12,7 +12,6 @@ import re
 import unicodedata
 import tempfile
 import threading
-from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
@@ -42,6 +41,8 @@ logger = logging.getLogger(__name__)
 CHECK_PG_MAX_LARGE_BYTES = 15 * 1024 * 1024
 CHECK_PG_MAX_ROWS_PER_USER = 3_000_000
 GPS_HEADER = "GPS"
+# Max distinct plates per SQL round-trip (ANY(...)); avoids N queries per small-file row.
+_CHECK_PLATE_LOOKUP_BATCH = 2048
 
 
 def _norm_header_sim(s: str) -> str:
@@ -273,27 +274,96 @@ def _apply_migrations(conn) -> None:
             "CREATE INDEX IF NOT EXISTS idx_clr_user_plate ON check_large_rows (user_id, plate_normalized)"
         )
         cur.execute(
-            """
-            DO $p$
-            BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_policies WHERE schemaname = 'public'
-                  AND tablename = 'check_large_imports' AND policyname = 'check_large_imports_isolation'
-              ) THEN
-                CREATE POLICY check_large_imports_isolation ON check_large_imports FOR ALL
-                USING (
-                  COALESCE(current_setting('app.is_admin', true), '') = 'true'
-                  OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-                )
-                WITH CHECK (
-                  COALESCE(current_setting('app.is_admin', true), '') = 'true'
-                  OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-                );
-              END IF;
-            END
-            $p$;
-            """
+            "CREATE INDEX IF NOT EXISTS idx_clr_plate_normalized ON check_large_rows (plate_normalized)"
         )
+
+
+def _compact_redundant_gps_in_row_data(conn, batch_size: int = 20000, max_batches: int = 3) -> int:
+    """
+    Save space safely by removing duplicated GPS key from row_data only when
+    dedicated `gps` column is already non-empty.
+    """
+    updated_total = 0
+    with conn.cursor() as cur:
+        for _ in range(max_batches):
+            cur.execute(
+                """
+                WITH picked AS (
+                    SELECT ctid
+                    FROM check_large_rows
+                    WHERE gps <> ''
+                      AND (row_data ? 'GPS' OR row_data ? 'gps')
+                    LIMIT %s
+                )
+                UPDATE check_large_rows r
+                SET row_data = (r.row_data - 'GPS' - 'gps')
+                FROM picked
+                WHERE r.ctid = picked.ctid
+                """,
+                (batch_size,),
+            )
+            n = int(cur.rowcount or 0)
+            if n <= 0:
+                break
+            updated_total += n
+    if updated_total:
+        logger.info("check_postgres compacted redundant GPS row_data rows=%s", updated_total)
+    return updated_total
+
+
+def _ensure_peer_group_mirror_and_rls(conn) -> None:
+    """Shared فرز data: mirror table + RLS so group peers can read each other's rows."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS check_mirror_user_groups (
+            user_id INTEGER NOT NULL PRIMARY KEY,
+            group_id INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cmug_group ON check_mirror_user_groups (group_id)"
+    )
+    conn.execute("DROP POLICY IF EXISTS check_large_rows_isolation ON check_large_rows")
+    conn.execute("DROP POLICY IF EXISTS check_large_imports_isolation ON check_large_imports")
+    conn.execute(
+        """
+        CREATE POLICY check_large_rows_isolation ON check_large_rows FOR ALL
+        USING (
+          COALESCE(current_setting('app.is_admin', true), '') = 'true'
+          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+          OR EXISTS (
+            SELECT 1 FROM check_mirror_user_groups m1
+            INNER JOIN check_mirror_user_groups m2 ON m1.group_id = m2.group_id
+            WHERE m1.user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+              AND m2.user_id = check_large_rows.user_id
+          )
+        )
+        WITH CHECK (
+          COALESCE(current_setting('app.is_admin', true), '') = 'true'
+          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE POLICY check_large_imports_isolation ON check_large_imports FOR ALL
+        USING (
+          COALESCE(current_setting('app.is_admin', true), '') = 'true'
+          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+          OR EXISTS (
+            SELECT 1 FROM check_mirror_user_groups m1
+            INNER JOIN check_mirror_user_groups m2 ON m1.group_id = m2.group_id
+            WHERE m1.user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+              AND m2.user_id = check_large_imports.user_id
+          )
+        )
+        WITH CHECK (
+          COALESCE(current_setting('app.is_admin', true), '') = 'true'
+          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+        )
+        """
+    )
 
 
 def ensure_check_pg_schema(dsn: str) -> None:
@@ -313,26 +383,6 @@ def ensure_check_pg_schema(dsn: str) -> None:
         )
         """,
     ]
-    policy_rows = """
-    DO $p$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE schemaname = 'public'
-          AND tablename = 'check_large_rows' AND policyname = 'check_large_rows_isolation'
-      ) THEN
-        CREATE POLICY check_large_rows_isolation ON check_large_rows FOR ALL
-        USING (
-          COALESCE(current_setting('app.is_admin', true), '') = 'true'
-          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-        )
-        WITH CHECK (
-          COALESCE(current_setting('app.is_admin', true), '') = 'true'
-          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-        );
-      END IF;
-    END
-    $p$;
-    """
     with psycopg.connect(dsn, autocommit=True) as conn:
         for sql in stmts:
             conn.execute(sql)
@@ -341,29 +391,8 @@ def ensure_check_pg_schema(dsn: str) -> None:
         conn.execute("ALTER TABLE check_large_rows FORCE ROW LEVEL SECURITY")
         conn.execute("ALTER TABLE check_large_imports ENABLE ROW LEVEL SECURITY")
         conn.execute("ALTER TABLE check_large_imports FORCE ROW LEVEL SECURITY")
-        conn.execute(policy_rows)
-        conn.execute(
-            """
-            DO $p$
-            BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_policies WHERE schemaname = 'public'
-                  AND tablename = 'check_large_imports' AND policyname = 'check_large_imports_isolation'
-              ) THEN
-                CREATE POLICY check_large_imports_isolation ON check_large_imports FOR ALL
-                USING (
-                  COALESCE(current_setting('app.is_admin', true), '') = 'true'
-                  OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-                )
-                WITH CHECK (
-                  COALESCE(current_setting('app.is_admin', true), '') = 'true'
-                  OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-                );
-              END IF;
-            END
-            $p$;
-            """
-        )
+        _ensure_peer_group_mirror_and_rls(conn)
+        _compact_redundant_gps_in_row_data(conn)
     with _schema_lock:
         _schema_initialized.add(dsn)
     logger.info("check_postgres schema ensured (multi-import)")
@@ -381,8 +410,33 @@ def count_user_large_rows_sync(dsn: str, user_id: int, is_admin: bool) -> int:
             return int(row[0] if row else 0)
 
 
-def list_imports_sync(dsn: str, user_id: int, is_admin: bool) -> list[dict[str, Any]]:
+def count_rows_for_user_ids_sync(
+    dsn: str, user_id: int, is_admin: bool, target_user_ids: list[int]
+) -> int:
     ensure_check_pg_schema(dsn)
+    ids = [int(x) for x in (target_user_ids or []) if int(x) > 0]
+    if not ids:
+        return 0
+    with check_pg_tx(dsn, user_id, is_admin) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*)::bigint FROM check_large_rows WHERE user_id = ANY(%s)",
+                (ids,),
+            )
+            row = cur.fetchone()
+            return int(row[0] if row else 0)
+
+
+def list_imports_sync(
+    dsn: str,
+    user_id: int,
+    is_admin: bool,
+    *,
+    owner_user_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """قائمة استيرادات المستخدم `owner_user_id` (افتراضياً نفس المُتصل)."""
+    ensure_check_pg_schema(dsn)
+    owner = int(owner_user_id) if owner_user_id is not None else int(user_id)
     with check_pg_tx(dsn, user_id, is_admin) as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -393,7 +447,7 @@ def list_imports_sync(dsn: str, user_id: int, is_admin: bool) -> list[dict[str, 
                 WHERE i.user_id = %s
                 ORDER BY i.created_at ASC, i.id ASC
                 """,
-                (user_id,),
+                (owner,),
             )
             out = []
             for r in cur.fetchall():
@@ -457,6 +511,81 @@ def get_stored_large_meta_sync(dsn: str, user_id: int, is_admin: bool) -> dict[s
         "updated_at": imports[-1].get("created_at") if imports else None,
         "imports": imports,
         "has_data": True,
+    }
+
+
+def peer_user_ids_for_check_sync(dsn: str, user_id: int, is_admin: bool) -> list[int]:
+    """مستخدم فردي: [نفسه]. عضو مجموعة: كل user_id في نفس المجموعة (مرآة Postgres)."""
+    ensure_check_pg_schema(dsn)
+    with check_pg_tx(dsn, user_id, is_admin) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT group_id FROM check_mirror_user_groups WHERE user_id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return [user_id]
+            gid = row[0]
+            cur.execute(
+                """
+                SELECT user_id FROM check_mirror_user_groups
+                WHERE group_id = %s
+                ORDER BY user_id ASC
+                """,
+                (gid,),
+            )
+            peers = [int(r[0]) for r in cur.fetchall()]
+            return peers if peers else [user_id]
+
+
+def get_stored_large_meta_for_check_sync(
+    dsn: str, user_id: int, is_admin: bool
+) -> dict[str, Any] | None:
+    """اتحاد أعمدة كل ملفات المجموعة عند الفرز؛ قائمة الاستيراد في الواجهة تبقى للمستخدم فقط."""
+    peers = peer_user_ids_for_check_sync(dsn, user_id, is_admin)
+    if len(peers) == 1:
+        return get_stored_large_meta_sync(dsn, user_id, is_admin)
+    ensure_check_pg_schema(dsn)
+    imports_all: list[dict[str, Any]] = []
+    for uid in peers:
+        imports_all.extend(
+            list_imports_sync(dsn, user_id, is_admin, owner_user_id=uid)
+        )
+    imports_all.sort(key=lambda x: (x.get("created_at") or "", x["id"]))
+    if not imports_all:
+        return None
+    total_rows = sum(i["row_count"] for i in imports_all)
+    if total_rows == 0:
+        return None
+    seen: set[str] = set()
+    union_headers: list[str] = []
+    with check_pg_tx(dsn, user_id, is_admin) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT column_order FROM check_large_imports
+                WHERE user_id = ANY(%s)
+                ORDER BY user_id ASC, created_at ASC, id ASC
+                """,
+                (peers,),
+            )
+            for r in cur.fetchall():
+                co = r["column_order"]
+                arr = co if isinstance(co, list) else json.loads(co) if co else []
+                for h in arr:
+                    hs = str(h).strip() if h else ""
+                    if hs and hs not in seen:
+                        seen.add(hs)
+                        union_headers.append(hs)
+    return {
+        "headers": union_headers,
+        "sheet_name": "",
+        "row_count": total_rows,
+        "updated_at": imports_all[-1].get("created_at") if imports_all else None,
+        "imports": imports_all,
+        "has_data": True,
+        "peer_user_ids": peers,
     }
 
 
@@ -527,6 +656,8 @@ def import_large_workbook_sync(
     large_col: str,
     large_sheet: str,
     source_filename: str,
+    group_max_rows_limit: int | None = None,
+    user_max_rows_limit: int | None = None,
 ) -> dict[str, Any]:
     ensure_check_pg_schema(dsn)
     if len(lc_bytes) > CHECK_PG_MAX_LARGE_BYTES:
@@ -557,12 +688,26 @@ def import_large_workbook_sync(
             if normalize_plate(rp):
                 new_row_count += 1
 
-        current_total = count_user_large_rows_sync(dsn, user_id, is_admin)
-        if current_total + new_row_count > CHECK_PG_MAX_ROWS_PER_USER:
-            raise ValueError(
-                f"تجاوز الحد الأقصى {CHECK_PG_MAX_ROWS_PER_USER:,} صف لكل مستخدم "
-                f"(الحالي {current_total:,} + الجديد {new_row_count:,})."
+        if group_max_rows_limit is not None:
+            peers = peer_user_ids_for_check_sync(dsn, user_id, is_admin)
+            current_total = count_rows_for_user_ids_sync(
+                dsn, user_id, is_admin, peers
             )
+            if current_total + new_row_count > int(group_max_rows_limit):
+                raise ValueError(
+                    "تجاوزت الحد المسموح لعدد الصفوف المخزنة. راجع الحد المتاح لك مع الأدمن."
+                )
+        else:
+            current_total = count_user_large_rows_sync(dsn, user_id, is_admin)
+            limit = (
+                int(user_max_rows_limit)
+                if user_max_rows_limit is not None and int(user_max_rows_limit) > 0
+                else CHECK_PG_MAX_ROWS_PER_USER
+            )
+            if current_total + new_row_count > limit:
+                raise ValueError(
+                    "تجاوزت الحد المسموح لعدد الصفوف المخزنة. راجع الحد المتاح لك مع الأدمن."
+                )
 
         batch: list[tuple[int, int, str, Json, str]] = []
         batch_size = 2000
@@ -612,8 +757,11 @@ def import_large_workbook_sync(
                         if not h:
                             continue
                         cell = row[hi] if hi < len(row) else None
-                        if h == GPS_HEADER:
-                            gps_val = str(cell).strip() if cell is not None else ""
+                        if _norm_header_sim(h) == _norm_header_sim(GPS_HEADER):
+                            if not gps_val:
+                                gps_val = str(cell).strip() if cell is not None else ""
+                            # Keep GPS in dedicated column only to reduce JSONB size.
+                            continue
                         rd[h] = _jsonable_cell(cell)
                     batch.append((user_id, import_id, pn, Json(rd), gps_val))
                     total += 1
@@ -731,43 +879,62 @@ def _large_row_get(
     return None
 
 
-def _fetch_matches_by_import(
-    conn, user_id: int, plate_normalized: str
-) -> dict[int, list[dict[str, Any]]]:
-    out: dict[int, list[dict[str, Any]]] = defaultdict(list)
+def _fetch_matches_by_plates_batch(
+    conn, distinct_plates: list[str]
+) -> dict[str, dict[int, list[dict[str, Any]]]]:
+    """
+    Load matching large rows for many normalized plates in few queries.
+    `distinct_plates` should be unique norms (caller dedupes) to keep payloads small.
+    Returns: plate_normalized -> import_id -> row dicts (same shape as before).
+    """
+    result: dict[str, dict[int, list[dict[str, Any]]]] = {}
+    if not distinct_plates:
+        return result
     with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(
-            """
-            SELECT import_id, row_data, gps
-            FROM check_large_rows
-            WHERE user_id = %s AND plate_normalized = %s AND import_id IS NOT NULL
-            ORDER BY import_id ASC, id ASC
-            """,
-            (user_id, plate_normalized),
-        )
-        for row in cur.fetchall():
-            iid = row.get("import_id")
-            rd = row.get("row_data")
-            if iid is None:
+        for i in range(0, len(distinct_plates), _CHECK_PLATE_LOOKUP_BATCH):
+            chunk = distinct_plates[i : i + _CHECK_PLATE_LOOKUP_BATCH]
+            if not chunk:
                 continue
-            d = _merge_sql_gps_into_row(
-                _parse_row_data_dict(rd),
-                row.get("gps"),
+            cur.execute(
+                """
+                SELECT import_id, plate_normalized, row_data, gps
+                FROM check_large_rows
+                WHERE plate_normalized = ANY(%s) AND import_id IS NOT NULL
+                ORDER BY plate_normalized ASC, import_id ASC, id ASC
+                """,
+                (chunk,),
             )
-            out[int(iid)].append(d)
-    return out
+            for row in cur.fetchall():
+                pn = str(row.get("plate_normalized") or "").strip()
+                if not pn:
+                    continue
+                iid = row.get("import_id")
+                if iid is None:
+                    continue
+                iid_i = int(iid)
+                d = _merge_sql_gps_into_row(
+                    _parse_row_data_dict(row.get("row_data")),
+                    row.get("gps"),
+                )
+                bucket = result.setdefault(pn, {})
+                bucket.setdefault(iid_i, []).append(d)
+    return result
 
 
-def _load_imports_ordered(conn, user_id: int) -> list[dict[str, Any]]:
+def _load_imports_ordered_for_peers(
+    conn, peer_user_ids: list[int]
+) -> list[dict[str, Any]]:
+    if not peer_user_ids:
+        return []
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             SELECT id, filename, sheet_name, plate_column, column_order
             FROM check_large_imports
-            WHERE user_id = %s
-            ORDER BY created_at ASC, id ASC
+            WHERE user_id = ANY(%s)
+            ORDER BY user_id ASC, created_at ASC, id ASC
             """,
-            (user_id,),
+            (peer_user_ids,),
         )
         rows = []
         for r in cur.fetchall():
@@ -789,6 +956,12 @@ def _load_imports_ordered(conn, user_id: int) -> list[dict[str, Any]]:
 def _ws_set_col_widths(ws, max_col: int, width: float = 18.0) -> None:
     for c in range(1, max_col + 1):
         ws.column_dimensions[get_column_letter(c)].width = width
+
+
+def _plate_col_matches(col_name: str, plate_column: str) -> bool:
+    if not plate_column or not col_name:
+        return False
+    return _norm_header_sim(col_name) == _norm_header_sim(plate_column)
 
 
 def _write_row(
@@ -847,7 +1020,8 @@ def run_check_plates_postgres_sync(
     small_export_cols: list[str] | None,
 ) -> dict:
     ensure_check_pg_schema(dsn)
-    meta = get_stored_large_meta_sync(dsn, user_id, is_admin)
+    peer_ids = peer_user_ids_for_check_sync(dsn, user_id, is_admin)
+    meta = get_stored_large_meta_for_check_sync(dsn, user_id, is_admin)
     if not meta or meta.get("row_count", 0) == 0:
         return {
             "kind": "json",
@@ -918,7 +1092,7 @@ def run_check_plates_postgres_sync(
         multi_file_notes: list[tuple[str, str, list[Any], dict[int, list[dict]]]] = []
 
         with check_pg_tx(dsn, user_id, is_admin) as conn:
-            imports = _load_imports_ordered(conn, user_id)
+            imports = _load_imports_ordered_for_peers(conn, peer_ids)
             if not imports:
                 return {
                     "kind": "json",
@@ -927,8 +1101,8 @@ def run_check_plates_postgres_sync(
                 }
             imp_by_id = {i["id"]: i for i in imports}
 
-            # Pass 1: read small file and fetch matches (preserve small-file row order).
-            small_entries: list[dict[str, Any]] = []
+            # Pass 1a: read small file rows (order preserved); Pass 1b: one batched DB lookup per plate chunk.
+            pending: list[dict[str, Any]] = []
             for srow in itertools.chain((r for r in (row2, row3) if r is not None), srows):
                 if all(v is None for v in srow):
                     continue
@@ -937,12 +1111,27 @@ def run_check_plates_postgres_sync(
                 if not norm:
                     continue
                 small_vals = [(srow[i] if i < len(srow) else None) for i in se_idx]
-                groups = _fetch_matches_by_import(conn, user_id, norm)
+                plate_disp = str(rp).strip() if rp is not None else norm
+                pending.append(
+                    {
+                        "norm": norm,
+                        "plate_disp": plate_disp,
+                        "small_vals": small_vals,
+                    }
+                )
+            unique_norms = list(dict.fromkeys([p["norm"] for p in pending]))
+            norm_cache = _fetch_matches_by_plates_batch(conn, unique_norms)
+
+            small_entries: list[dict[str, Any]] = []
+            for p in pending:
+                norm = p["norm"]
+                groups = norm_cache.get(norm) or {}
                 if not groups:
                     unmatched_plates += 1
                     continue
                 matched_plate_hits += 1
-                plate_disp = str(rp).strip() if rp is not None else norm
+                plate_disp = p["plate_disp"]
+                small_vals = p["small_vals"]
                 if len(groups) > 1:
                     multi_file_notes.append((norm, plate_disp, small_vals, dict(groups)))
                 small_entries.append(
@@ -974,6 +1163,7 @@ def run_check_plates_postgres_sync(
                     )
                 if not sec_le:
                     sec_le = list(union_headers)
+                pc_l = (imp.get("plate_column") or "").strip()
                 for ent in small_entries:
                     lst = ent["groups"].get(iid) or []
                     if not lst:
@@ -1020,11 +1210,19 @@ def run_check_plates_postgres_sync(
                         title_ui = (imp.get("filename") or "").strip() or "ملف"
                         if sn:
                             title_ui = f"{title_ui} — ورقة: {sn}"
+                        plate_idx_sec: list[int] = []
+                        for i, c in enumerate(sec_le):
+                            if _plate_col_matches(c, pc_l):
+                                plate_idx_sec.append(i)
+                        for i, c in enumerate(se_cols):
+                            if _plate_col_matches(c, sc):
+                                plate_idx_sec.append(len(sec_le) + i)
                         preview_sections.append(
                             {
                                 "title": title_ui,
                                 "headers": [str(h) if h is not None else "" for h in hdr_vals],
                                 "col_sources": list(hdr_src),
+                                "plate_column_indices": plate_idx_sec,
                                 "rows": [],
                             }
                         )
@@ -1135,6 +1333,15 @@ def run_check_plates_postgres_sync(
             _strip_small_word_from_header_title(c) for c in le_preview
         ] + [_strip_small_word_from_header_title(c) for c in se_cols]
         col_sources_preview = ["large"] * len(le_preview) + ["small"] * len(se_cols)
+        plate_indices_flat: list[int] = []
+        if imports:
+            pcl0 = (imports[0].get("plate_column") or "").strip()
+            for i, c in enumerate(le_preview):
+                if _plate_col_matches(c, pcl0):
+                    plate_indices_flat.append(i)
+            for i, c in enumerate(se_cols):
+                if _plate_col_matches(c, sc):
+                    plate_indices_flat.append(len(le_preview) + i)
 
         content = workbook_to_bytes(wb)
         ts = datetime.now().strftime("%Y%m%d_%H%M")
@@ -1146,6 +1353,7 @@ def run_check_plates_postgres_sync(
             "preview": {
                 "headers": display_headers,
                 "col_sources": col_sources_preview,
+                "plate_column_indices": plate_indices_flat,
                 "rows": preview_rows,
                 "sections": preview_sections,
                 "total_rows": matched_rows_count,
@@ -1175,7 +1383,8 @@ def collect_gps_vehicles_stored_sync(
     small_sheet: str,
 ) -> dict[str, Any]:
     ensure_check_pg_schema(dsn)
-    meta = get_stored_large_meta_sync(dsn, user_id, is_admin)
+    peer_ids = peer_user_ids_for_check_sync(dsn, user_id, is_admin)
+    meta = get_stored_large_meta_for_check_sync(dsn, user_id, is_admin)
     if not meta or not meta.get("headers"):
         return {"detail": "لا توجد بيانات ملف كبير مخزّنة", "vehicles": []}
 
@@ -1210,17 +1419,23 @@ def collect_gps_vehicles_stored_sync(
         matched: list[dict[str, Any]] = []
         seen: set[tuple[str, str, str]] = set()
 
+        gps_rows: list[tuple[Any, str]] = []
+        for row in sd[1:]:
+            if all(v is None for v in row):
+                continue
+            rp = row[sci] if sci < len(row) else None
+            norm = normalize_plate(rp)
+            if not norm:
+                continue
+            gps_rows.append((rp, norm))
+
         with check_pg_tx(dsn, user_id, is_admin) as conn:
-            imports = _load_imports_ordered(conn, user_id)
+            imports = _load_imports_ordered_for_peers(conn, peer_ids)
             imp_name = {i["id"]: i["filename"] for i in imports}
-            for row in sd[1:]:
-                if all(v is None for v in row):
-                    continue
-                rp = row[sci] if sci < len(row) else None
-                norm = normalize_plate(rp)
-                if not norm:
-                    continue
-                groups = _fetch_matches_by_import(conn, user_id, norm)
+            unique_gps = list(dict.fromkeys([t[1] for t in gps_rows]))
+            norm_cache = _fetch_matches_by_plates_batch(conn, unique_gps)
+            for rp, norm in gps_rows:
+                groups = norm_cache.get(norm) or {}
                 for iid, rds in groups.items():
                     fn = imp_name.get(iid, "")
                     for ld in rds:
@@ -1257,7 +1472,7 @@ def collect_gps_vehicles_stored_sync(
                                     if notes_col
                                     else ""
                                 )
-                                + (f" [{fn}]" if fn else ""),
+                                + ((" " + fn) if fn else ""),
                             }
                         )
 
@@ -1401,14 +1616,10 @@ def admin_list_import_rows_page_sync(
             )
             rows: list[dict[str, Any]] = []
             for row in cur.fetchall():
-                rd = row.get("row_data")
-                if isinstance(rd, str):
-                    try:
-                        rd = json.loads(rd)
-                    except Exception:
-                        rd = {"_raw": rd}
-                elif rd is not None and not isinstance(rd, dict):
-                    rd = {"_value": str(rd)}
+                rd = _merge_sql_gps_into_row(
+                    _parse_row_data_dict(row.get("row_data")),
+                    row.get("gps"),
+                )
                 rows.append(
                     {
                         "id": int(row["id"]),
@@ -1458,14 +1669,10 @@ def admin_write_import_csv_tempfile_sync(
                         if not chunk:
                             break
                         for row in chunk:
-                            rd = row.get("row_data")
-                            if isinstance(rd, str):
-                                try:
-                                    rd = json.loads(rd)
-                                except Exception:
-                                    rd = {}
-                            elif not isinstance(rd, dict):
-                                rd = {}
+                            rd = _merge_sql_gps_into_row(
+                                _parse_row_data_dict(row.get("row_data")),
+                                row.get("gps"),
+                            )
                             vals: list[Any] = [
                                 int(row["id"]),
                                 row.get("plate_normalized") or "",

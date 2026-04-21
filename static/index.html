@@ -83,10 +83,6 @@ input:focus,select:focus{border-color:var(--sky);box-shadow:0 0 0 3px var(--skyg
 input.teal-focus:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(20,184,166,.15)}
 select{cursor:pointer}
 input[type=file]{display:none}
-/* ── Tabs ── */
-.tabs{display:flex;background:var(--s2);border:1px solid var(--brd);border-radius:9px;padding:4px;gap:4px;margin-bottom:1rem}
-.tab{flex:1;padding:.55rem;border:none;background:transparent;color:var(--dim2);font-family:var(--ar);font-size:.85rem;border-radius:6px;cursor:pointer;transition:all .2s;font-weight:600}
-.tab.active{background:linear-gradient(135deg,var(--sky),var(--cyan));color:#fff;box-shadow:0 2px 12px var(--skyglow)}
 /* ── Recording ── */
 .rec-section{display:flex;flex-direction:column;align-items:center;gap:1.2rem;padding:.5rem 0 1rem}
 .btn-pair{display:flex;align-items:center;justify-content:center;gap:2.4rem}
@@ -299,6 +295,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .check-export-hint{font-size:.68rem;color:var(--dim2);margin-top:.35rem;line-height:1.5}
 #omMatchTableWrap th.om-match-col-small,#omMatchTableWrap td.om-match-col-small{background:rgba(34,197,94,.1);box-shadow:inset 3px 0 0 #16a34a}
 #omMatchTableWrap th.om-match-col-small{color:#166534;font-weight:800}
+#omMatchTableWrap th.om-match-col-plate,#omMatchTableWrap td.om-match-col-plate{font-weight:800!important;color:#0f172a}
 #omMatchPreviewHost.om-match-preview-host{display:flex;flex-direction:column;gap:1.05rem;margin-bottom:1rem;direction:rtl}
 .om-xls-sheet{border:1px solid #b0b0b0;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.07),0 0 0 1px rgba(255,255,255,.8) inset}
 .om-xls-titlebar{background:linear-gradient(180deg,#ebebeb 0%,#d9d9d9 55%,#d0d0d0 100%);color:#1f1f1f;font-family:Segoe UI,Calibri,Tahoma,sans-serif;font-size:.76rem;font-weight:700;padding:.58rem 1rem;line-height:1.45;text-align:right;border-bottom:1px solid #a8a8a8;letter-spacing:.01em}
@@ -308,6 +305,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .om-xls-grid tbody td{border:1px solid #c6c6c6;padding:.42rem .55rem;text-align:center;vertical-align:middle;color:#1a1a1a;background:#fff;font-family:Segoe UI,Calibri,var(--ar)}
 .om-xls-grid tbody tr:nth-child(even) td{background:#f7f7f7}
 .om-xls-grid td.om-xls-small,.om-xls-grid th.om-xls-small{background:#edf7ed!important;border-color:#9ccc9c!important;color:#14532d!important;font-weight:700}
+.om-xls-grid th.om-xls-plate,.om-xls-grid td.om-xls-plate{font-weight:800!important;color:#0f172a}
+.om-xls-grid td.om-xls-small.om-xls-plate,.om-xls-grid th.om-xls-small.om-xls-plate{color:#14532d!important;font-weight:800!important}
 /* Tafrigh data table: same Excel-like shell as الفرز preview; fixed scroll height */
 .tafrigh-xls-scroll{height:min(52vh,460px);max-height:460px;min-height:240px;overflow:auto;background:#fcfcfc;direction:rtl;border-top:1px solid #c5c5c5}
 .tafrigh-xls-scroll .om-xls-grid thead th{text-transform:none;letter-spacing:.02em;font-family:var(--ar),Segoe UI,sans-serif}
@@ -410,11 +409,6 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   <div class="modal" style="max-width:500px">
     <button class="modal-close" onclick="closeSettings()">&#x2715;</button>
     <h2>&#x2699;&#xFE0F; الإعدادات</h2>
-    <div style="background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:1rem;margin-bottom:1rem;font-size:.82rem;line-height:1.65;color:var(--dim2)">
-      <p style="margin:0 0 .6rem">مفاتيح <strong>Gemini / ORS / Maps</strong> تُخزَّن على الخادم في <strong>Redis</strong> (أو عبر متغيرات البيئة) — لا يُخزَّن مفتاح في المتصفح. قوائم <strong>موديلات Gemini</strong> تُضاف من لوحة Admin.</p>
-      <p style="margin:0">للمستخدمين العاديين يُستخدم تلقائياً أول موديل REST وLive مفعّل من الخادم. اختيار الموديل من القائمة المنسدلة متاح في صفحة Admin فقط.</p>
-    </div>
-
     <div class="settings-logout-wrap">
       <p style="font-size:.76rem;color:var(--dim2);margin-bottom:.6rem">تسجيل الخروج يمسح جلسة الدخول ويعيدك لشاشة تسجيل الدخول (لا يُغلق خادم التطبيق على الجهاز).</p>
       <button type="button" class="settings-logout-btn" onclick="authFullLogout()">&#x1F6AA; تسجيل خروج كامل</button>
@@ -464,8 +458,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 
 <!-- TOP NAV: التفريغ | الفرز | التشيك -->
 <div class="top-nav">
-  <button class="tnav-btn tafrigh active" id="navTafrigh"  onclick="switchPage('tafrigh')">&#x1F3D9; التفريغ</button>
-  <button class="tnav-btn field"          id="navField"    onclick="switchPage('field')">&#x1F50D; الفرز</button>
+  <button class="tnav-btn tafrigh"        id="navTafrigh"  onclick="switchPage('tafrigh')">&#x1F3D9; التفريغ</button>
+  <button class="tnav-btn field active"   id="navField"    onclick="switchPage('field')">&#x1F50D; الفرز</button>
   <button class="tnav-btn checkpage"      id="navCheck"    onclick="switchPage('check')">&#x2705; التشيك</button>
   <button class="tnav-btn checkpage"      id="navGmaps"    onclick="switchPage('gmaps')">&#x1F5FA;&#xFE0F; Google Maps</button>
   <button class="tnav-btn checkpage"      id="navAdmin"    onclick="switchPage('admin')" style="display:none">&#x1F6E1;&#xFE0F; Admin</button>
@@ -473,7 +467,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 
 
 <!-- ═══════════ PAGE: TAFRIGH ═══════════ -->
-<div id="pageTafrigh">
+<div id="pageTafrigh" style="display:none">
 <div class="panel">
   <div class="ptitle">&#x2699;&#xFE0F; إعدادات التفريغ</div>
   <div class="row2">
@@ -482,11 +476,6 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <div><label class="lbl">اسم ورقة Excel</label><input type="text" id="sheetName" value="بيانات المركبات" oninput="syncTafrighSheetTitle()"/></div>
   </div>
 </div>
-<div class="tabs">
-  <button class="tab active" onclick="switchTab('live')">&#x1F3D9; تسجيل مباشر</button>
-  <button class="tab"        onclick="switchTab('upload')">&#x1F4C2; رفع ملف</button>
-</div>
-<!-- LIVE -->
 <div id="livePanel">
   <div class="panel">
     <div class="ptitle">&#x1F3D9; التسجيل (أقصى مدة 5 دقائق)</div>
@@ -548,63 +537,6 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <div class="glog" id="gLog"><span>سيبدأ تسجيل الإحداثيات مع بدء التسجيل …</span></div>
   </div>
 </div>
-<!-- UPLOAD -->
-<div id="uploadPanel" style="display:none">
-  <div class="panel">
-    <div class="ptitle">&#x1F4C2; رفع ملف صوتي</div>
-    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileIn').click()"
-         ondragover="event.preventDefault();this.classList.add('drag')"
-         ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
-      <div class="icon">&#x1F3B5;</div>
-      <p><strong>اضغط لاختيار ملف</strong> أو اسحبه هنا</p>
-      <p style="font-size:.73rem;margin-top:.25rem">webm &middot; opus &middot; ogg &middot; mp3 &middot; mp4 &middot; wav &middot; flac</p>
-    </div>
-    <div class="file-name-row">
-      <span class="fname" id="fname"></span>
-      <button class="rm-btn" id="removeUploadBtn" onclick="removeUploadFile()">&#x2715; إزالة</button>
-    </div>
-    <input type="file" id="fileIn" accept=".webm,.opus,.ogg,.mp3,.mp4,.m4a,.wav,.flac,audio/*" onchange="handleFile(this.files[0])"/>
-    <div class="audio-wrap" id="upAudioWrap" style="width:100%">
-      <div class="audio-custom">
-        <button class="play-pause" id="upPP" onclick="togglePlay('up')">&#x25B6;</button>
-        <div class="progress-wrap" id="upPW" onclick="seekAudio('up',event)">
-          <div class="progress-fill" id="upPF"></div><div class="progress-thumb" id="upPT"></div>
-        </div>
-        <span class="time-txt" id="upTT">0:00 / 0:00</span>
-      </div>
-      <div class="speed-row">
-        <label>السرعة</label>
-        <input type="range" id="upSpd" min=".5" max="3" step=".25" value="1" oninput="setSpd('up')"/>
-        <span class="spv" id="upSpdV">1.00&times;</span>
-      </div>
-      <audio id="upAudio" preload="auto"></audio>
-    </div>
-  </div>
-  <div class="panel">
-    <div class="ptitle">&#x1F4CD; GPS يدوي</div>
-    <p style="font-size:.78rem;color:var(--dim2);margin-bottom:.8rem">نقطة واحدة لكل سيارة بالترتيب.</p>
-    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
-      <button id="upGpsBtn" onclick="captureUpGps()" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(145deg,#5eead4,#14b8a6);border:none;cursor:pointer;font-size:1.3rem;color:#fff;box-shadow:0 0 18px rgba(20,184,166,.3);transition:all .2s">&#x1F4CD;</button>
-      <div>
-        <div style="font-size:.82rem;font-weight:700;color:var(--teal)" id="ugCnt">0 نقطة</div>
-        <button onclick="clearUpGps()" style="margin-top:.3rem;background:transparent;border:1px solid var(--brd2);color:var(--dim2);padding:.25rem .65rem;border-radius:5px;cursor:pointer;font-family:var(--mono);font-size:.7rem">&#x1F5D1; مسح</button>
-      </div>
-    </div>
-    <div class="glog" id="ugLog" style="margin-top:.7rem"><span>لا توجد نقاط …</span></div>
-  </div>
-  <!-- Upload action buttons -->
-  <div style="display:flex;gap:.7rem;margin-top:.85rem">
-    <button id="upAddBtn" onclick="addToQueue()" disabled
-            style="flex:1;padding:.72rem;background:transparent;border:1.5px solid var(--green);color:var(--green);border-radius:9px;font-family:var(--ar);font-size:.88rem;font-weight:700;cursor:pointer;transition:all .2s;opacity:.35">
-      &#x2795; إضافة للقائمة
-    </button>
-    <button id="upDirectBtn" onclick="directSend()" disabled
-            style="flex:1;padding:.72rem;background:linear-gradient(135deg,var(--amber),#d97706);border:none;color:#fff;border-radius:9px;font-family:var(--ar);font-size:.88rem;font-weight:700;cursor:pointer;transition:all .2s;opacity:.35">
-      &#x26A1; إرسال مباشر
-    </button>
-  </div>
-</div>
-
 <div class="panel">
   <div class="ptitle">&#x1F4CB; قائمة التسجيلات
     <span id="qBadge" style="background:var(--skyg);border:1px solid rgba(14,165,233,.25);color:var(--sky);padding:.1rem .55rem;border-radius:20px;font-size:.65rem">0</span>
@@ -647,20 +579,11 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 
 
 <!-- ═══════════ PAGE: FIELD (الفرز — مطابقة ملفين + GPS) ═══════════ -->
-<div id="pageField" style="display:none">
-  <div class="check-hero">
-    <h2>&#x1F50D; الفرز &mdash; مطابقة اللوحات</h2>
-    <p>ارفع الملف الكبير والملف الصغير، وسيتم اكتشاف عمود اللوحة تلقائياً والمطابقة فور الضغط. يدعم تصدير Excel ومطابقة GPS عند وجود عمود GPS في الملف الكبير.</p>
-  </div>
+<div id="pageField">
   <div id="omPgStoragePanel" class="panel violet-accent" style="display:none;margin-bottom:1rem">
-    <div class="ptitle violet">&#x1F5C4; تخزين الملف الكبير على الخادم (Postgres)</div>
-    <p style="font-size:.74rem;color:var(--dim2);line-height:1.65">يمكنك استيراد <strong>عدة ملفات كبيرة</strong>؛ بحد أقصى <strong>15MB</strong> لكل ملف. إذا احتوى ملف على <strong>أكثر من ورقة</strong>، يُستورد <strong>أول ورقة فقط</strong> (ما لم يُحدَّد اسم ورقة مطابق عند الطلب). الحد الإجمالي للصفوف المخزّنة لكل مستخدم <strong>3 مليون</strong> صف. المطابقة تتم من الملف الصغير إلى <strong>كل</strong> البيانات المخزّنة مع تطبيع رقم اللوحة؛ عمود النتيجة الأول يعرض رقم اللوحة المطابقة، وفي آخر الشيت يُذكر إن وُجدت لوحة في أكثر من ملف.</p>
-    <div id="omStoredImportsList" style="margin-top:.6rem;font-size:.74rem"></div>
-    <label style="display:flex;align-items:center;gap:.55rem;font-size:.8rem;margin:.55rem 0;cursor:pointer">
-      <input type="checkbox" id="omUseStoredLargeCb" onchange="omOnToggleStoredLarge()"/>
-      استخدام البيانات المخزّنة للمطابقة (بدون رفع الملف الكبير مع كل Match)
-    </label>
-    <p style="font-size:.72rem;color:var(--dim2);margin-top:.45rem">رفع الملف الكبير في صفحة الفرز = استيراد تلقائي مباشر إلى قاعدة البيانات.</p>
+    <input type="checkbox" id="omUseStoredLargeCb" checked disabled style="display:none"/>
+    <div id="omGroupBanner" style="display:none;margin-bottom:.55rem;padding:.5rem .65rem;border:1px solid var(--brd2);border-radius:8px;background:var(--s2);font-size:.76rem;color:var(--dim);line-height:1.5"></div>
+    <div id="omStoredImportsList" style="margin-top:.3rem;font-size:.74rem"></div>
     <div id="omPgImportHint" style="font-size:.7rem;color:var(--dim2);margin-top:.5rem;font-family:var(--mono)"></div>
   </div>
   <div class="file-grid">
@@ -695,7 +618,6 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       </div>
       <div style="margin-top:.65rem">
         <label class="lbl">أعمدة الملف الكبير في التطابق</label>
-        <p class="check-export-hint" style="margin-top:.35rem;line-height:1.55">يُصدَّر تلقائياً <strong>كل أعمدة</strong> الملف الكبير (أو البيانات المخزَّنة على الخادم) في ورقة النتيجة، بالإضافة إلى أعمدة الملف الصغير التي تختارها أدناه.</p>
       </div>
     </div>
     <div class="file-card violet-card">
@@ -711,14 +633,6 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
         <button class="rm-btn" id="omRemoveSmallBtn" onclick="omRemoveCheckFile('small')">&#x2715; إزالة</button>
       </div>
       <input type="file" id="omSmallFileIn" accept=".xlsx,.xls" onchange="omOnCheckFileChange(this.files[0],'small')"/>
-      <div style="margin-top:.7rem">
-        <label class="lbl">أو الصق اللوحات نصيًا (سطر لكل لوحة)</label>
-        <textarea id="omSmallPlatesText" rows="8" placeholder="مثال:
-ر ك ع 7511
-ر م ي 8802
-ر ي و 4146" style="width:100%;resize:vertical;font-family:var(--mono);font-size:.78rem;line-height:1.7" oninput="omOnSmallTextInput()"></textarea>
-        <p class="check-export-hint" style="margin-top:.35rem">إذا أدخلت نص هنا سيتم استخدامه بدل الملف الصغير تلقائيًا.</p>
-      </div>
       <div style="margin-top:.75rem"><label class="lbl">عمود اللوحة في الملف الصغير</label>
         <div class="col-detect-row">
           <select id="omSmallCol" onchange="omOnManualColInput('small')">
@@ -733,11 +647,14 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
           <summary>اختر الأعمدة الظاهرة في ورقة التطابق…</summary>
           <div id="omSmallExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
         </details>
-        <p class="check-export-hint">نفس قاعدة التحديد التلقائي. في ملف التطابق تُزال كلمة «صغير» من عناوين الأعمدة؛ أعمدة الملف الصغير تُميَّز باللون الأخضر في Excel وفي المعاينة.</p>
       </div>
-      <div style="margin-top:.65rem;padding:.75rem;background:var(--s2);border:1px solid var(--brd);border-radius:8px">
-        <p style="font-size:.73rem;color:var(--dim2);line-height:1.6">&#x1F4A1; الأعمدة المكتشفة تلقائياً:<br/>
-          <span style="font-family:var(--mono);color:var(--violet)">اللوحه &middot; رقم اللوحه &middot; اللوحة &middot; رقم اللوحة</span></p>
+      <div style="margin-top:.7rem">
+        <label class="lbl">أو الصق اللوحات نصيًا (سطر لكل لوحة)</label>
+        <textarea id="omSmallPlatesText" rows="8" placeholder="مثال:
+ر ك ع 7511
+ر م ي 8802
+ر ي و 4146" style="width:100%;resize:vertical;font-family:var(--mono);font-size:.78rem;line-height:1.7" oninput="omOnSmallTextInput()"></textarea>
+        <p class="check-export-hint" style="margin-top:.35rem">إذا أدخلت نص هنا سيتم استخدامه بدل الملف الصغير تلقائيًا.</p>
       </div>
     </div>
   </div>
@@ -768,7 +685,10 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
         <tbody id="omMatchTbody"></tbody>
       </table>
     </div>
-    <button class="dl-btn" id="omDlBtn" onclick="omOpenExcelResult()" style="display:none">&#x1F4C2; فتح في Excel على الجهاز</button>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <button class="dl-btn" id="omDlBtn" onclick="omOpenExcelResult()" style="display:none">&#x1F4C2; فتح في Excel على الجهاز</button>
+      <button class="tb-btn danger" type="button" onclick="omClearSavedFieldMatch()">🗑 مسح نتيجة الفرز المحفوظة من هذا الجهاز</button>
+    </div>
   </div>
 
   <div id="omGpsMatchSection" style="display:none">
@@ -835,11 +755,6 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 
 <!-- ═══════════ PAGE: CHECK (التشيك — Gemini Live) ═══════════ -->
 <div id="pageCheck" style="display:none">
-  <div class="check-hero">
-    <h2>&#x2705; التشيك &mdash; مطابقة مباشرة</h2>
-    <p>ملف Excel مرجعي واحد، اكتشاف تلقائي لعمود اللوحة، ثم استماع مباشر مع النموذج أو إدخال لوحة يدوياً. الأخضر = موجود في الملف، الأحمر = غير موجود.</p>
-  </div>
-
   <div class="panel violet-accent">
     <div class="ptitle violet">&#x1F4C2; ملف Excel المرجعي</div>
     <div class="upload-zone" id="dropLarge" onclick="document.getElementById('largeFileIn').click()"
@@ -896,6 +811,45 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
         </div>
       </div>
     </div>
+
+    <div class="panel violet-accent" style="margin-top:1rem" id="checkSessionSheetPanel">
+      <div class="ptitle violet">&#x1F4C4; جدول جلسة التشيك (مثل التفريغ)</div>
+      <div style="margin-bottom:.55rem">
+        <label class="lbl">&#x1F4DD; اسم ورقة / ملف التصدير</label>
+        <input type="text" id="checkSessionSheetName" class="fc-plate-check-input" style="max-width:420px;width:100%;margin-top:.35rem" placeholder="مثال: تشيك زيارة 17-4" dir="rtl" oninput="syncCheckSessionSheetTitle()"/>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:.55rem;margin:.55rem 0 .75rem;align-items:end">
+        <div>
+          <label class="lbl">الحي</label>
+          <input type="text" id="checkSessionDefaultDistrict" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة"/>
+        </div>
+        <div>
+          <label class="lbl">الشارع</label>
+          <input type="text" id="checkSessionDefaultStreet" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة"/>
+        </div>
+        <div>
+          <label class="lbl">اسم المسجّل</label>
+          <input type="text" id="checkSessionDefaultRecorder" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة"/>
+        </div>
+      </div>
+      <div class="om-xls-sheet" id="checkSessionXlsSheet">
+        <div class="om-xls-titlebar" id="checkSessionSheetTitlebar">بيانات مركبات الجلسة</div>
+        <div class="om-xls-scroll tafrigh-xls-scroll">
+          <table class="om-xls-grid" id="checkSessionDataTable">
+            <thead><tr>
+              <th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الحي</th><th>الشارع</th><th>تفاصيل الموقع</th><th>نوع المركبة</th><th>اسم المسجّل</th><th>موقع الشارع</th><th></th>
+            </tr></thead>
+            <tbody id="checkSessionExcelBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:.55rem;margin-top:.75rem;align-items:center">
+        <button type="button" class="dl-btn" onclick="exportCheckSessionExcel()">&#x1F4E5; تصدير Excel</button>
+        <button type="button" class="tb-btn outline" onclick="clearCheckSessionRows()">&#x1F5D1; مسح جدول الجلسة</button>
+        <span id="checkSessionRowCount" style="font-size:.72rem;color:var(--dim2)">0 صف</span>
+      </div>
+    </div>
+
     <p style="font-size:.71rem;color:var(--dim2);margin-top:.55rem;line-height:1.55">نفس مفتاح Gemini في &#x2699; الإعدادات. الصوت يُرسل كـ PCM 16kHz. عند انتهاء الجملة أرسل إشارة نهاية الدور تلقائياً.</p>
   </div>
 
@@ -983,8 +937,14 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <div class="row2">
       <div><label class="lbl">اسم المستخدم</label><input type="text" id="admNewUser" placeholder="username"/></div>
       <div><label class="lbl">كلمة المرور</label><input type="password" id="admNewPass" placeholder="password"/></div>
+      <div><label class="lbl">حد صفوف المستخدم (إجباري)</label><input type="number" id="admUserRowsLimit" min="1" step="1" value="3000000" placeholder="مثال: 3000000"/></div>
     </div>
     <div style="margin-top:.6rem"><label><input type="checkbox" id="admIsAdmin"/> إنشاء كـ Admin</label></div>
+    <div style="margin-top:.55rem"><label class="lbl">مجموعة الفرز (اختياري)</label>
+      <select id="admNewGroupId" style="width:100%;max-width:320px;padding:.45rem;border-radius:8px;border:1px solid var(--brd2);font-size:.78rem">
+        <option value="">— فردي (بدون مجموعة) —</option>
+      </select>
+    </div>
     <div style="display:flex;gap:.6rem;margin-top:.8rem;flex-wrap:wrap">
       <button class="tb-btn primary" onclick="adminCreateUser()">إنشاء مستخدم</button>
       <button class="tb-btn outline" onclick="adminLoadUsers()">تحديث القائمة</button>
@@ -993,10 +953,22 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <div id="adminMsg" style="margin-top:.6rem;font-family:var(--mono);font-size:.75rem;color:var(--dim2)"></div>
   </div>
   <div class="panel">
+    <div class="ptitle">مجموعات الفرز المشتركة</div>
+    <p style="font-size:.72rem;color:var(--dim2);margin:0 0 .55rem;line-height:1.5">أعضاء المجموعة يفرزون الشيت الصغير ضد <strong>كل</strong> ملفات كبيرة مرفوعة من أي عضو؛ كل مستخدم يرى ملفاته فقط في قائمة الاستيراد.</p>
+    <div class="row2" style="max-width:760px">
+      <div><label class="lbl">اسم مجموعة جديدة</label><input type="text" id="admNewGroupName" placeholder="مثال: فريق أ"/></div>
+      <div><label class="lbl">حد صفوف المجموعة (رصيد مشترك)</label><input type="number" id="admNewGroupRowsLimit" min="1" step="1" value="3000000"/></div>
+      <div style="align-self:end"><button type="button" class="tb-btn primary" onclick="adminCreateGroup()">إنشاء مجموعة</button></div>
+    </div>
+    <div class="tbl-outer" style="margin-top:.55rem;max-width:520px">
+      <table style="font-size:.76rem"><thead><tr><th>ID</th><th>الاسم</th><th>المستخدم</th><th>حد الصفوف</th><th></th></tr></thead><tbody id="adminGroupsBody"></tbody></table>
+    </div>
+  </div>
+  <div class="panel">
     <div class="ptitle">Users</div>
     <div class="tbl-outer">
       <table>
-        <thead><tr><th>ID</th><th>Username</th><th>Admin</th><th>Active</th><th>Device</th><th>Actions</th></tr></thead>
+        <thead><tr><th>ID</th><th>Username</th><th>Admin</th><th>Active</th><th>Device</th><th>مجموعة</th><th>المستخدم</th><th>حد المستخدم</th><th>Actions</th></tr></thead>
         <tbody id="adminUsersBody"></tbody>
       </table>
     </div>
@@ -1061,10 +1033,10 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 <script>
 const MAX_REC_SECS=300;
 // ── State ──────────────────────────────────────────────
-let tab='live',gpsMode='auto',recState='idle';
+let gpsMode='auto',recState='idle';
 let mediaRec=null,allChunks=[],curChunks=[];
-let liveBlob=null,liveAudioUrl=null,uploadFile=null;
-let liveGps=[],uploadGps=[],autoTimer=null,recTimer=null,recSecs=0;
+let liveBlob=null,liveAudioUrl=null;
+let liveGps=[],autoTimer=null,recTimer=null,recSecs=0;
 let queueItems=[],tableRows=[];
 const pendingDeletes=new Map();
 let checkLargeFile=null;
@@ -1075,6 +1047,7 @@ let checkLiveWs=null,checkLiveMicOn=false,checkLiveAudioCtx=null,checkLiveScript
 let checkLiveSilenceTimer=null,checkLiveLastVoiceAt=0;
 let checkLiveSfxCtx=null;
 let checkLiveLastHitNotifyKey='',checkLiveLastHitNotifyTs=0;
+let checkSessionRows=[];
 const CHECK_LIVE_SILENCE_MS=650;
 const CHECK_LIVE_VOICE_RMS_THRESHOLD=0.012;
 const CHECK_LIVE_CLIENT_ID_KEY='checkLiveClientId_v1';
@@ -1091,7 +1064,7 @@ let gmFollowZoom=17;
 let gmFollowEnabled=false;
 let gmHasUserZoomed=false;
 let gmHeadersLoaded=false;
-const audioEls={live:null,up:null,fc:null};
+const audioEls={live:null,fc:null};
 const FIRST_PERM_ASKED_KEY='firstVisitPermAsked_v1';
 const MIC_PERM_GRANTED_KEY='micPermGranted_v1';
 const GEO_PERM_GRANTED_KEY='geoPermGranted_v1';
@@ -1125,7 +1098,6 @@ async function requestFirstVisitPermissions(){
 
 window.addEventListener('DOMContentLoaded',()=>{
   audioEls.live=document.getElementById('liveAudio');
-  audioEls.up=document.getElementById('upAudio');
   const fcAud=document.getElementById('fcAudio');
   if(fcAud){ audioEls.fc=fcAud; bindAudioPlayer('fc'); }
   bindAudioPlayer('live');bindAudioPlayer('up');
@@ -1669,14 +1641,6 @@ function toggleTheme(){applyTheme(document.body.classList.contains('light')?'dar
 function openInstr(){document.getElementById('instrModal').classList.add('open');}
 function closeInstr(){document.getElementById('instrModal').classList.remove('open');}
 document.getElementById('instrModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeInstr();});
-// ── Tab (tafrigh) ─────────────────────────────────────
-function switchTab(t){
-  tab=t;
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0&&t==='live')||(i===1&&t==='upload')));
-  document.getElementById('livePanel').style.display=t==='live'?'':'none';
-  document.getElementById('uploadPanel').style.display=t==='upload'?'':'none';
-  checkReady();
-}
 // ── GPS helpers ───────────────────────────────────────
 function setMode(m){gpsMode=m;document.getElementById('mM').classList.toggle('sel',m==='manual');document.getElementById('mA').classList.toggle('sel',m==='auto');document.getElementById('autoOpts').style.display=m==='auto'?'':'none';}
 function geoErrorMessage(err){
@@ -1699,11 +1663,6 @@ async function capturePin(){
   try{const p=await getPos();const pt=mkPt(p);liveGps.push(pt);updateGpsUI(pt,liveGps.length,true);btn.classList.add('flash');setTimeout(()=>btn.classList.remove('flash'),300);playPinSound();}
   catch(e){setDot('err','GPS: '+e.message);}
 }
-async function captureUpGps(){
-  try{const p=await getPos();const pt=mkPt(p);uploadGps.push(pt);document.getElementById('ugCnt').textContent=uploadGps.length+' نقطة';const log=document.getElementById('ugLog');if(uploadGps.length===1)log.innerHTML='';const d=document.createElement('div');d.className='gm';d.textContent='['+uploadGps.length+'] '+pt.lat+', '+pt.lng+'  \xB1'+pt.accuracy+'m';log.appendChild(d);log.scrollTop=log.scrollHeight;playPinSound();}
-  catch(e){alert('GPS غير متاح: '+e.message);}
-}
-function clearUpGps(){uploadGps=[];document.getElementById('ugCnt').textContent='0 نقطة';document.getElementById('ugLog').innerHTML='<span>لا توجد نقاط …</span>';}
 async function collectAutoGps(){try{const p=await getPos();const pt=mkPt(p);liveGps.push(pt);updateGpsUI(pt,liveGps.length,false);}catch(e){setDot('err','GPS: '+e.message);}}
 function mkPt(p){return{lat:+p.coords.latitude.toFixed(7),lng:+p.coords.longitude.toFixed(7),accuracy:Math.round(p.coords.accuracy)};}
 function updateGpsUI(pt,cnt,manual){
@@ -1862,29 +1821,14 @@ function seekAudio(key,ev){
 }
 function setSpd(key){const v=parseFloat(document.getElementById(key+'Spd').value);audioEls[key].playbackRate=v;document.getElementById(key+'SpdV').textContent=v.toFixed(2)+'\xD7';}
 function fmtTime(s){if(!s||isNaN(s))return'0:00';return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');}
-// ── File upload (tafrigh) ──────────────────────────────
-function handleFile(f){if(!f)return;uploadFile=f;document.getElementById('fname').textContent='\u{1F4CE} '+f.name;document.getElementById('removeUploadBtn').classList.add('show');setAudioSrc('up',URL.createObjectURL(f));document.getElementById('upAudioWrap').classList.add('show');checkReady();}
-function handleDrop(e){e.preventDefault();document.getElementById('dropZone').classList.remove('drag');const f=e.dataTransfer.files[0];if(f)handleFile(f);}
-function removeUploadFile(){uploadFile=null;uploadGps=[];document.getElementById('fname').textContent='';document.getElementById('removeUploadBtn').classList.remove('show');document.getElementById('upAudioWrap').classList.remove('show');document.getElementById('fileIn').value='';checkReady();}
 // ── Queue ─────────────────────────────────────────────
-function checkReady(){
-  const hasFile=!!uploadFile;
-  const hasModel=getUserRestModel().length>1;
-  const enabled=hasFile&&hasModel;
-  ['upAddBtn','upDirectBtn'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el)return;
-    el.disabled=!enabled;
-    el.style.opacity=enabled?'1':'0.35';
-    el.style.cursor=enabled?'pointer':'not-allowed';
-  });
-}
+function checkReady(){}
 function addToQueue(){
-  const hasAudio=tab==='live'?!!liveBlob:!!uploadFile;if(!hasAudio){showStatus('err','لا يوجد تسجيل');return;}
-  const blob=tab==='live'?liveBlob:uploadFile;
-  const gps=tab==='live'?[...liveGps]:[...uploadGps];
-  const dur=tab==='live'?recSecs:0;
-  const name=tab==='live'?'تسجيل — '+new Date().toLocaleTimeString('ar-EG')+' ('+fmtTime(dur)+')':(uploadFile?uploadFile.name:'ملف مرفوع');
+  if(!liveBlob){showStatus('err','لا يوجد تسجيل');return;}
+  const blob=liveBlob;
+  const gps=[...liveGps];
+  const dur=recSecs;
+  const name='تسجيل — '+new Date().toLocaleTimeString('ar-EG')+' ('+fmtTime(dur)+')';
   queueItems.push({id:uid(),blob,url:URL.createObjectURL(blob),gps,name,dur,status:'pending'});
   renderQueue();
   _resetLiveUI();
@@ -1901,6 +1845,9 @@ async function pollTranscribeStatus(jobId){
     if(!r.ok) throw new Error(payload.detail||r.statusText);
     if(payload.status==='done'&&payload.data){
       const d=payload.data;
+      if(d.kind==='transcribe'&&d.storage==='inline'&&d.payload){
+        return d.payload;
+      }
       if(d.storage==='file'&&d.kind==='transcribe'){
         const tr=await fetch('/api/transcribe/result/'+encodeURIComponent(jobId));
         const tj=await tr.json().catch(()=>({}));
@@ -1926,23 +1873,20 @@ function _appendPlatesWithDistrict(plates){
 }
 // ── Direct send ───────────────────────────────────────
 async function directSend(){
-  const hasAudio=tab==='live'?!!liveBlob:!!uploadFile;
-  if(!hasAudio){showStatus('err','لا يوجد تسجيل صوتي');return;}
+  if(!liveBlob){showStatus('err','لا يوجد تسجيل صوتي');return;}
   if(!getUserRestModel()){showStatus('err','لا يوجد موديل REST مفعّل على الخادم — أضفه من صفحة Admin.');return;}
 
-  const blob=tab==='live'?liveBlob:uploadFile;
-  const gps=tab==='live'?[...liveGps]:[...uploadGps];
-  const dur=tab==='live'?recSecs:0;
-  const name=tab==='live'
-    ?'\u0625\u0631\u0633\u0627\u0644 \u0645\u0628\u0627\u0634\u0631 \u2014 '+new Date().toLocaleTimeString('ar-EG')+' ('+fmtTime(dur)+')'
-    :(uploadFile?uploadFile.name:'\u0645\u0644\u0641 \u0645\u0631\u0641\u0648\u0639');
+  const blob=liveBlob;
+  const gps=[...liveGps];
+  const dur=recSecs;
+  const name='\u0625\u0631\u0633\u0627\u0644 \u0645\u0628\u0627\u0634\u0631 \u2014 '+new Date().toLocaleTimeString('ar-EG')+' ('+fmtTime(dur)+')';
 
   const item={id:uid(),blob,url:URL.createObjectURL(blob),gps,name,dur,status:'processing',lastError:null};
   queueItems.push(item);
   const idx=queueItems.length-1;
   renderQueue();
 
-  // ════ FIX: reset live UI only (not upload) — upload file stays in place ════
+  // reset live UI after direct send
   _resetLiveUI();
 
   addLog('\u0625\u0631\u0633\u0627\u0644 \u0645\u0628\u0627\u0634\u0631: '+name,'info');
@@ -1980,20 +1924,16 @@ async function directSend(){
   }
 }
 
-// ════ FIX 1: _resetLiveUI — upload file stays in place after direct send ════
 function _resetLiveUI(){
-  if(tab==='live'){
-    liveBlob=null;liveAudioUrl=null;allChunks=[];liveGps=[];recSecs=0;recState='idle';
-    document.getElementById('liveAudioWrap').classList.remove('show');
-    document.getElementById('recChoices').classList.remove('show');
-    document.getElementById('recLbl').textContent='اضغط للتسجيل';
-    document.getElementById('gCnt').textContent='0';
-    document.getElementById('pinCount').textContent='0 نقطة';
-    document.getElementById('timer').classList.remove('on');
-    document.getElementById('recProgress').classList.remove('on');
-    document.getElementById('gLog').innerHTML='<span>سيبدأ تسجيل الإحداثيات مع بدء التسجيل …</span>';
-  }
-  // upload tab: keep file in place so user can re-send or review
+  liveBlob=null;liveAudioUrl=null;allChunks=[];liveGps=[];recSecs=0;recState='idle';
+  document.getElementById('liveAudioWrap').classList.remove('show');
+  document.getElementById('recChoices').classList.remove('show');
+  document.getElementById('recLbl').textContent='اضغط للتسجيل';
+  document.getElementById('gCnt').textContent='0';
+  document.getElementById('pinCount').textContent='0 نقطة';
+  document.getElementById('timer').classList.remove('on');
+  document.getElementById('recProgress').classList.remove('on');
+  document.getElementById('gLog').innerHTML='<span>سيبدأ تسجيل الإحداثيات مع بدء التسجيل …</span>';
   checkReady();
 }
 
@@ -2008,7 +1948,7 @@ function renderQueue(){
   const hasPending=queueItems.some(i=>i.status==='pending'||i.status==='error');
   const hasActive =queueItems.some(i=>i.status==='processing');
   if(!queueItems.length){
-    list.innerHTML='<div class="queue-empty">\u0644\u0627 \u062A\u0648\u062C\u062F \u062A\u0633\u062C\u064A\u0644\u0627\u062A \u2014 \u0633\u062C\u0651\u0644 \u0623\u0648 \u0627\u0631\u0641\u0639 \u0645\u0644\u0641\u0627\u064B \u0648\u0623\u0636\u0641\u0647 \u0644\u0644\u0642\u0627\u0626\u0645\u0629</div>';
+    list.innerHTML='<div class="queue-empty">\u0644\u0627 \u062A\u0648\u062C\u062F \u062A\u0633\u062C\u064A\u0644\u0627\u062A \u2014 \u0627\u0628\u062F\u0623 \u062A\u0633\u062C\u064A\u0644\u064B\u0627 \u062C\u062F\u064A\u062F\u064B\u0627 \u062B\u0645 \u0623\u0636\u0641\u0647 \u0644\u0644\u0642\u0627\u0626\u0645\u0629</div>';
     document.getElementById('sendAllBtn').disabled=true;return;
   }
   list.innerHTML='';
@@ -2406,6 +2346,163 @@ function checkLiveClearPlates(){
   checkLiveLastHitNotifyKey='';
   checkLiveLastHitNotifyTs=0;
 }
+function syncCheckSessionSheetTitle(){
+  const bar=document.getElementById('checkSessionSheetTitlebar');
+  const inp=document.getElementById('checkSessionSheetName');
+  if(!bar||!inp) return;
+  bar.textContent=inp.value.trim()||'\u0628\u064A\u0627\u0646\u0627\u062A \u0645\u0631\u0643\u0628\u0627\u062A \u0627\u0644\u062C\u0644\u0633\u0629';
+}
+function checkSessionStreetLocForRow(row){
+  if(row && row.street_location!=null && String(row.street_location).trim()!=='') return String(row.street_location).trim();
+  const g=(row&&row.gps)?String(row.gps).trim():'';
+  return g;
+}
+function renderCheckSessionTable(){
+  if(!Array.isArray(checkSessionRows)) checkSessionRows=[];
+  const body=document.getElementById('checkSessionExcelBody');
+  if(!body) return;
+  body.innerHTML='';
+  checkSessionRows.forEach(function(row,i){
+    const tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td class="td-plate td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'full_plate\',this.textContent)">'+esc(row.full_plate||row.plate||'')+'</td>'
+      +'<td class="td-gps">'+esc(row.gps||'\u2014')+'</td>'
+      +'<td class="td-edit" style="font-family:var(--mono);font-size:.78rem" contenteditable="true" onblur="editCheckSessionCell('+i+',\'recording_date\',this.textContent)">'+esc(row.recording_date||'')+'</td>'
+      +'<td class="td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'district_name\',this.textContent)">'+esc(row.district_name||'')+'</td>'
+      +'<td class="td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'street_name\',this.textContent)">'+esc(row.street_name||'')+'</td>'
+      +'<td class="td-edit td-locdetails" style="font-size:.78rem;color:var(--dim2)" contenteditable="true" onblur="editCheckSessionCell('+i+',\'location_details\',this.textContent)">'+esc(row.location_details||'')+'</td>'
+      +'<td class="td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'vehicle_type\',this.textContent)">'+esc(row.vehicle_type||'')+'</td>'
+      +'<td class="td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'recorder_name\',this.textContent)">'+esc(row.recorder_name||'')+'</td>'
+      +'<td class="td-gps">'+esc(checkSessionStreetLocForRow(row)||'\u2014')+'</td>'
+      +'<td><button class="del-row" onclick="deleteCheckSessionRow('+i+')">\u2715</button></td>';
+    body.appendChild(tr);
+  });
+  const rc=document.getElementById('checkSessionRowCount');
+  if(rc) rc.textContent=checkSessionRows.length+' \u0635\u0641';
+}
+function editCheckSessionCell(idx,key,val){
+  if(checkSessionRows[idx]) checkSessionRows[idx][key]=String(val||'').trim();
+  renderCheckSessionTable();
+}
+function deleteCheckSessionRow(idx){
+  if(!checkSessionRows[idx]) return;
+  checkSessionRows.splice(idx,1);
+  renderCheckSessionTable();
+}
+function clearCheckSessionRows(){
+  if(!checkSessionRows.length) return;
+  if(!confirm('\u0645\u0633\u062D \u062C\u062F\u0648\u0644 \u0627\u0644\u062C\u0644\u0633\u0629\u061F')) return;
+  checkSessionRows=[];
+  renderCheckSessionTable();
+}
+function formatCheckSessionGpsPair(lat,lng){
+  function r(x){
+    var n=Number(x);
+    if(!Number.isFinite(n)) return null;
+    return parseFloat(n.toFixed(6));
+  }
+  var a=r(lat), b=r(lng);
+  if(a==null||b==null) return '';
+  return String(a)+','+String(b);
+}
+function checkLiveFillGpsForSessionRow(idx){
+  if(!navigator.geolocation||typeof navigator.geolocation.getCurrentPosition!=='function') return;
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      const r=checkSessionRows[idx];
+      if(!r) return;
+      const la=pos.coords.latitude, lo=pos.coords.longitude;
+      const pair=formatCheckSessionGpsPair(la,lo);
+      if(pair){
+        r.gps=pair;
+        renderCheckSessionTable();
+      }
+    },
+    function(){},
+    {enableHighAccuracy:true,timeout:12000,maximumAge:0}
+  );
+}
+function checkLiveMaybeAppendSessionRow(data){
+  if(!data||data.skip_session_sheet) return;
+  if(data.found!==false) return;
+  const plate=String(data.plate||'').trim();
+  if(!plate) return;
+  const now=new Date();
+  const recording=now.toLocaleString('ar-EG',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  var dn=document.getElementById('checkSessionDefaultDistrict');
+  var sn=document.getElementById('checkSessionDefaultStreet');
+  var rn=document.getElementById('checkSessionDefaultRecorder');
+  const row={
+    full_plate:plate,
+    vehicle_type:'\u0645\u0644\u0627\u0643\u0649',
+    district_name:(dn&&dn.value||'').trim(),
+    street_name:(sn&&sn.value||'').trim(),
+    gps:'',
+    location_details:'',
+    recorder_name:(rn&&rn.value||'').trim(),
+    recording_date:recording,
+    street_location:''};
+  if(!Array.isArray(checkSessionRows)) checkSessionRows=[];
+  checkSessionRows.push(row);
+  const idx=checkSessionRows.length-1;
+  renderCheckSessionTable();
+  checkLiveFillGpsForSessionRow(idx);
+}
+function checkLiveRemoveSessionRowsByNorm(nk){
+  if(!nk||!Array.isArray(checkSessionRows)) return;
+  const next=[];
+  for(let i=0;i<checkSessionRows.length;i++){
+    if(normPlate(checkSessionRows[i].full_plate||'')!==nk) next.push(checkSessionRows[i]);
+  }
+  if(next.length!==checkSessionRows.length){
+    checkSessionRows=next;
+    renderCheckSessionTable();
+  }
+}
+function checkLiveSyncSessionFromItems(items){
+  if(!Array.isArray(items)) return;
+  if(!Array.isArray(checkSessionRows)) checkSessionRows=[];
+  for(let i=0;i<items.length;i++){
+    const it=items[i]||{};
+    const plate=String(it.plate||'').trim();
+    if(!plate) continue;
+    const nk=normPlate(plate);
+    if(!nk) continue;
+    if(it.moving){
+      checkLiveRemoveSessionRowsByNorm(nk);
+      continue;
+    }
+    if(it.found===false){
+      let dup=false;
+      for(let j=0;j<checkSessionRows.length;j++){
+        if(normPlate(checkSessionRows[j].full_plate||'')===nk){ dup=true; break; }
+      }
+      if(!dup) checkLiveMaybeAppendSessionRow({plate:plate,found:false});
+    }
+  }
+}
+async function exportCheckSessionExcel(){
+  if(!Array.isArray(checkSessionRows)||!checkSessionRows.length){
+    showCheckStatus('err','\u0627\u0644\u062C\u062F\u0648\u0644 \u0641\u0627\u0631\u063A');
+    return;
+  }
+  const sheetName=(document.getElementById('checkSessionSheetName')&&document.getElementById('checkSessionSheetName').value||'').trim()||'\u0628\u064A\u0627\u0646\u0627\u062A \u0645\u0631\u0643\u0628\u0627\u062A \u0627\u0644\u062C\u0644\u0633\u0629';
+  showCheckStatus('proc','\u062C\u0627\u0631\u064A \u062A\u0635\u062F\u064A\u0631 Excel \u2026',true);
+  try{
+    const fd=new FormData();
+    fd.append('rows_json',JSON.stringify(checkSessionRows));
+    fd.append('sheet_name',sheetName);
+    const res=await fetch('/api/export-excel',{method:'POST',body:fd});
+    if(!res.ok){
+      const err=await res.json().catch(function(){return{};});
+      throw new Error((err&&err.detail)||res.statusText||'');
+    }
+    triggerDownload(await res.blob(),'\u062A\u0634\u064A\u0643_\u062C\u0644\u0633\u0629_'+sheetName+'.xlsx');
+    showCheckStatus('ok','\u2714 \u062A\u0645 \u062A\u062D\u0645\u064A\u0644 \u0645\u0644\u0641 Excel',false);
+  }catch(e){
+    showCheckStatus('err','\u062E\u0637\u0623 \u0641\u064A \u0627\u0644\u062A\u0635\u062F\u064A\u0631: '+(e&&e.message?e.message:String(e)),false);
+  }
+}
 function checkLiveOnMessage(ev){
   let j;
   try{ j=JSON.parse(ev.data);}catch(e){ return; }
@@ -2433,6 +2530,10 @@ function checkLiveOnMessage(ev){
   }
   if(t==='plate_result'){
     checkLiveAppendResultRow(j.data||{});
+    return;
+  }
+  if(t==='check_session_sync'){
+    checkLiveSyncSessionFromItems((j.data&&j.data.items)||[]);
     return;
   }
   if(t==='error'){
@@ -3482,13 +3583,13 @@ function applyAdminNavVisibility(){
     showLock(true);
     setMsg('تم تسجيل الخروج',true);
     if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
-    try{ if(typeof switchPage==='function') switchPage('tafrigh'); }catch(_){}
+    try{ if(typeof switchPage==='function') switchPage('field'); }catch(_){}
   };
 
   const oldSwitch=window.switchPage;
   window.switchPage=function(p){
     if(p==='admin' && localStorage.getItem('auth_is_admin')!=='1'){
-      if(typeof oldSwitch==='function') oldSwitch('tafrigh');
+      if(typeof oldSwitch==='function') oldSwitch('field');
       return;
     }
     if(p==='admin'){
@@ -3506,13 +3607,106 @@ function applyAdminNavVisibility(){
     if(typeof oldSwitch==='function') return oldSwitch(p);
   }
 
+  window.adminLoadGroups=async function(){
+    const tb=document.getElementById('adminGroupsBody');
+    const sel=document.getElementById('admNewGroupId');
+    try{
+      const r=await fetch('/admin/groups');
+      const j=await r.json().catch(()=>[]);
+      if(!r.ok) throw new Error('فشل تحميل المجموعات');
+      window._adminGroupsCache=j||[];
+      if(tb){
+        tb.innerHTML=(j||[]).map(function(g){
+          var used=Number(g.used_stored_large_rows||0);
+          var lim=(g.max_stored_large_rows==null?'—':String(g.max_stored_large_rows));
+          return '<tr><td>'+g.id+'</td><td>'+(typeof esc==='function'?esc(String(g.name)):String(g.name))+'</td><td><span style="font-family:var(--mono)">'+String(used)+'</span></td><td><span style="font-family:var(--mono)">'+lim+'</span></td><td style="white-space:nowrap"><button type="button" class="tb-btn outline" style="padding:.2rem .4rem;font-size:.65rem;margin-left:4px" onclick="adminUpdateGroupRowsLimit('+g.id+','+Number(g.max_stored_large_rows||0)+')">تعديل الحد</button><button type="button" class="tb-btn danger" style="padding:.2rem .4rem;font-size:.65rem" onclick="adminDeleteGroup('+g.id+')">حذف</button></td></tr>';
+        }).join('')||'<tr><td colspan="5" style="color:var(--dim2)">لا مجموعات</td></tr>';
+      }
+      if(sel){
+        const cur=sel.value;
+        sel.innerHTML='<option value="">— فردي (بدون مجموعة) —</option>'+(j||[]).map(function(g){
+          return '<option value="'+g.id+'">'+(typeof esc==='function'?esc(String(g.name)):String(g.name))+'</option>';
+        }).join('');
+        if(cur) sel.value=cur;
+      }
+      return j;
+    }catch(e){
+      if(tb) tb.innerHTML='<tr><td colspan="3" style="color:var(--red)">'+(e.message||'')+'</td></tr>';
+      return [];
+    }
+  };
+
+  window.adminCreateGroup=async function(){
+    const n=(document.getElementById('admNewGroupName')||{}).value.trim();
+    const limRaw=(document.getElementById('admNewGroupRowsLimit')||{}).value;
+    const lim=parseInt(String(limRaw||''),10);
+    const m=document.getElementById('adminMsg');
+    if(!n){ if(m){ m.style.color='var(--red)'; m.textContent='أدخل اسم المجموعة'; } return; }
+    if(!(lim>0)){ if(m){ m.style.color='var(--red)'; m.textContent='أدخل حد صفوف صحيح للمجموعة'; } return; }
+    try{
+      const r=await fetch('/admin/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,max_stored_large_rows:lim})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل إنشاء المجموعة');
+      if(m){ m.style.color='var(--green)'; m.textContent='تم إنشاء المجموعة'; }
+      document.getElementById('admNewGroupName').value='';
+      await window.adminLoadGroups();
+    }catch(e){ if(m){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; } }
+  };
+
+  window.adminDeleteGroup=async function(gid){
+    if(!confirm('حذف المجموعة؟ سيتم إلغاء ربط جميع المستخدمين بها (فردي).')) return;
+    const m=document.getElementById('adminMsg');
+    try{
+      const r=await fetch('/admin/groups/'+gid,{method:'DELETE'});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل الحذف');
+      if(m){ m.style.color='var(--green)'; m.textContent='تم حذف المجموعة'; }
+      await window.adminLoadGroups();
+      await window.adminLoadUsers();
+    }catch(e){ if(m){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; } }
+  };
+
+  window.adminAssignUserGroup=async function(userId,sel){
+    const v=sel.value;
+    const group_id=v===''?null:parseInt(v,10);
+    const m=document.getElementById('adminMsg');
+    try{
+      const r=await fetch('/admin/users/'+userId+'/group',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({group_id:group_id})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل تحديث المجموعة');
+      if(m){ m.style.color='var(--green)'; m.textContent='تم تحديث المجموعة'; }
+      await window.adminLoadUsers();
+    }catch(e){ if(m){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; } await window.adminLoadUsers(); }
+  };
+
+  window.adminUpdateGroupRowsLimit=async function(groupId,current){
+    const m=document.getElementById('adminMsg');
+    const raw=prompt('حد الصفوف الجديد للمجموعة:',String(current||''));
+    if(raw==null) return;
+    const lim=parseInt(String(raw||'').trim(),10);
+    if(!(lim>0)){ if(m){ m.style.color='var(--red)'; m.textContent='الحد يجب أن يكون رقمًا موجبًا'; } return; }
+    try{
+      const r=await fetch('/admin/groups/'+groupId+'/rows-limit',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({max_stored_large_rows:lim})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل تحديث الحد');
+      if(m){ m.style.color='var(--green)'; m.textContent='تم تحديث حد المجموعة'; }
+      await window.adminLoadGroups();
+    }catch(e){ if(m){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; } }
+  };
+
   window.adminCreateUser=async function(){
     const u=document.getElementById('admNewUser').value.trim();
     const p=document.getElementById('admNewPass').value;
     const isAdmin=document.getElementById('admIsAdmin').checked;
+    const limRaw=(document.getElementById('admUserRowsLimit')||{}).value;
+    const userLimit=parseInt(String(limRaw||''),10);
     const m=document.getElementById('adminMsg');
+    const gsel=document.getElementById('admNewGroupId');
+    if(!(userLimit>0)){ m.style.color='var(--red)'; m.textContent='حد صفوف المستخدم مطلوب'; return; }
+    const payload={username:u,password:p,is_admin:isAdmin,max_stored_large_rows:userLimit};
+    if(gsel&&gsel.value) payload.group_id=parseInt(gsel.value,10);
     try{
-      const r=await fetch('/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,is_admin:isAdmin})});
+      const r=await fetch('/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const j=await r.json().catch(()=>({}));
       if(!r.ok) throw new Error(j.detail||'فشل إنشاء المستخدم');
       m.style.color='var(--green)'; m.textContent='تم إنشاء المستخدم';
@@ -3524,6 +3718,8 @@ function applyAdminNavVisibility(){
     const body=document.getElementById('adminUsersBody');
     const m=document.getElementById('adminMsg');
     try{
+      await window.adminLoadGroups();
+      const groups=window._adminGroupsCache||[];
       const r=await fetch('/admin/users');
       const j=await r.json().catch(()=>[]);
       if(!r.ok) throw new Error(j.detail||'فشل تحميل المستخدمين');
@@ -3533,7 +3729,13 @@ function applyAdminNavVisibility(){
         const tr=document.createElement('tr');
         const dev=u.device_id?(typeof esc==='function'?esc(String(u.device_id)):'-'):'-';
         const un=typeof esc==='function'?esc(u.username):String(u.username);
-        tr.innerHTML='<td>'+u.id+'</td><td>'+un+'</td><td>'+(u.is_admin?'yes':'no')+'</td><td>'+(u.is_active===false?'لا':'نعم')+'</td><td style="font-size:.7rem;max-width:140px;overflow:hidden;text-overflow:ellipsis">'+dev+'</td><td style="white-space:nowrap">'+
+        let opts='<option value="">— فردي —</option>';
+        groups.forEach(function(g){
+          const sel=(u.group_id!=null&&Number(u.group_id)===Number(g.id))?' selected':'';
+          opts+='<option value="'+g.id+'"'+sel+'>'+(typeof esc==='function'?esc(String(g.name)):String(g.name))+'</option>';
+        });
+        tr.innerHTML='<td>'+u.id+'</td><td>'+un+'</td><td>'+(u.is_admin?'yes':'no')+'</td><td>'+(u.is_active===false?'لا':'نعم')+'</td><td style="font-size:.7rem;max-width:140px;overflow:hidden;text-overflow:ellipsis">'+dev+'</td><td><select style="font-size:.68rem;max-width:130px;padding:.2rem" onchange="adminAssignUserGroup('+u.id+',this)">'+opts+'</select></td><td style="font-family:var(--mono);font-size:.68rem">'+String(u.used_stored_large_rows||0)+'</td><td style="font-family:var(--mono);font-size:.68rem">'+(u.max_stored_large_rows==null?'—':String(u.max_stored_large_rows))+'</td><td style="white-space:nowrap">'+
+          '<button type="button" class="tb-btn outline" style="padding:.25rem .45rem;font-size:.68rem;margin-left:4px" onclick="adminUpdateUserRowsLimit('+u.id+','+Number(u.max_stored_large_rows||0)+')">حد الصفوف</button>'+
           '<button type="button" class="tb-btn outline" style="padding:.25rem .45rem;font-size:.68rem;margin-left:4px" onclick="adminSetActive('+u.id+','+(u.is_active===false?'true':'false')+')">'+(u.is_active===false?'تفعيل':'تعطيل')+'</button>'+
           '<button type="button" class="tb-btn outline" style="padding:.25rem .45rem;font-size:.68rem;margin-left:4px" onclick="adminResetDevice('+u.id+')">مسح الجهاز</button>'+
           '<button type="button" class="tb-btn danger" style="padding:.25rem .45rem;font-size:.68rem" onclick="adminDeleteUser('+u.id+')">حذف</button></td>';
@@ -3541,6 +3743,21 @@ function applyAdminNavVisibility(){
       });
       m.style.color='var(--green)'; m.textContent='تم تحميل المستخدمين';
     }catch(e){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; }
+  };
+
+  window.adminUpdateUserRowsLimit=async function(userId,current){
+    const m=document.getElementById('adminMsg');
+    const raw=prompt('حد الصفوف الجديد للمستخدم:',String(current||''));
+    if(raw==null) return;
+    const lim=parseInt(String(raw||'').trim(),10);
+    if(!(lim>0)){ if(m){ m.style.color='var(--red)'; m.textContent='الحد يجب أن يكون رقمًا موجبًا'; } return; }
+    try{
+      const r=await fetch('/admin/users/'+userId+'/rows-limit',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({max_stored_large_rows:lim})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.detail||'فشل تحديث الحد');
+      if(m){ m.style.color='var(--green)'; m.textContent='تم تحديث حد المستخدم'; }
+      await window.adminLoadUsers();
+    }catch(e){ if(m){ m.style.color='var(--red)'; m.textContent=e.message||'فشل'; } }
   };
 
   window.adminLoadGeminiModelsAdmin=async function(){

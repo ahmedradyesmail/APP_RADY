@@ -28,13 +28,14 @@ _EXPORT_HEADERS = [
     "رقم اللوحة",
     "GPS",
     "تاريخ التسجيل",
+    "الحي",
     "الشارع",
     "تفاصيل الموقع",
     "نوع المركبة",
     "اسم المسجّل",
     "موقع الشارع",
 ]
-_COL_WIDTHS = [22, 26, 18, 22, 40, 14, 20, 26]
+_COL_WIDTHS = [22, 26, 18, 18, 22, 40, 14, 20, 26]
 
 
 def _clean_sheet_name(name: str) -> str:
@@ -119,6 +120,7 @@ async def export_excel(
             r.get("full_plate", ""),
             r.get("gps", ""),
             r.get("recording_date", ""),
+            r.get("district_name", ""),
             r.get("street_name", "غير محدد"),
             r.get("location_details", ""),
             r.get("vehicle_type", "ملاكى"),
@@ -131,7 +133,7 @@ async def export_excel(
             cell.alignment = ca
             cell.border = brd; cell.fill = fill
 
-    for col, w in zip("ABCDEFGH", _COL_WIDTHS):
+    for col, w in zip("ABCDEFGHI", _COL_WIDTHS):
         ws.column_dimensions[col].width = w
 
     content = await workbook_to_bytes_async(wb)
@@ -179,13 +181,14 @@ async def export_field_check(
         "رقم اللوحة",
         "GPS",
         "تاريخ التسجيل",
+        "الحي",
         "الشارع",
         "تفاصيل الموقع",
         "نوع المركبة",
         "اسم المسجّل",
         "موقع الشارع",
     ]
-    col_widths = [22, 26, 18, 22, 40, 14, 20, 26]
+    col_widths = [22, 26, 18, 18, 22, 40, 14, 20, 26]
 
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=h)
@@ -208,6 +211,7 @@ async def export_field_check(
             r.get("full_plate", ""),
             r.get("gps", ""),
             r.get("recording_date", ""),
+            r.get("district_name", ""),
             r.get("street_name", "غير محدد"),
             r.get("location_details", ""),
             r.get("vehicle_type", "ملاكى"),
@@ -220,7 +224,7 @@ async def export_field_check(
             cell.alignment = ca
             cell.border = brd; cell.fill = fill
 
-    for col, w in zip("ABCDEFGH", col_widths):
+    for col, w in zip("ABCDEFGHI", col_widths):
         ws.column_dimensions[col].width = w
 
     content = await workbook_to_bytes_async(wb)
@@ -266,6 +270,10 @@ def _parse_excel_sync(content: bytes) -> tuple[list[dict], int]:
                     if "الشارع" in hs:
                         return cell_at(i)
                     continue
+                if name == "الحي":
+                    if "الحي" in hs:
+                        return cell_at(i)
+                    continue
                 if name not in hs:
                     continue
                 return cell_at(i)
@@ -278,17 +286,24 @@ def _parse_excel_sync(content: bytes) -> tuple[list[dict], int]:
                     return cell_at(i)
             return cell_at(fallback)
 
-        # Fallback indices: new export order (no #): plate, gps, date, street, details, vehicle, recorder, street_loc
-        # Legacy files with "#" column still match by header text first.
+        def col_district() -> str:
+            for i, h in enumerate(headers):
+                hs = str(h).strip() if h else ""
+                if "الحي" in hs:
+                    return cell_at(i)
+            return ""
+
+        # Fallbacks: new export = plate,gps,date,district,street,... ; legacy (no الحي) matches headers first.
         rows_out.append({
             "full_plate":       col("اللوحة", 0),
             "gps":              col("GPS", 1),
             "recording_date":   col("التسجيل", 2),
-            "street_name":      col("الشارع", 3),
-            "location_details": col("الموقع", 4),
-            "vehicle_type":     col("المركبة", 5),
-            "recorder_name":    col("المسجّل", 6),
-            "street_location":  col_street_location(7),
+            "district_name":    col_district(),
+            "street_name":      col("الشارع", 4),
+            "location_details": col("الموقع", 5),
+            "vehicle_type":     col("المركبة", 6),
+            "recorder_name":    col("المسجّل", 7),
+            "street_location":  col_street_location(8),
             "notes":            col("ملاحظات", -1),
         })
 

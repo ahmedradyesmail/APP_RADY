@@ -28,15 +28,6 @@ class Settings(BaseSettings):
     # Optional: shared job status for multi-worker (Gunicorn). If unset, in-memory per worker.
     redis_url: str | None = None
 
-    # Excel match results (فرز): on-disk file per job; job JSON stays small (no base64).
-    # With Redis + several Gunicorn workers, point this to a shared filesystem (NFS) or
-    # sticky sessions; otherwise a download may hit a worker that does not have the file.
-    check_results_dir: str = "data/check_results"
-
-    # Audio transcribe (تفريغ / تشيك ميداني): JSON result on disk; job row stays small.
-    # Same multi-worker note as check_results_dir.
-    transcribe_results_dir: str = "data/transcribe_results"
-
     # Concurrent Gemini Live WebSocket sessions per process (each holds an upstream WS).
     gemini_live_max_concurrent: int = 8
     # Check (فرز) queue limits (in-process workers).

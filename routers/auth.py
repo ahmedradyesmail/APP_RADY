@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from db import get_db
 from dependencies.auth import get_current_user, require_device_header
@@ -18,8 +18,24 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/me", response_model=MeOut)
-async def me(current: User = Depends(get_current_user)):
-    return MeOut(username=current.username, is_admin=current.is_admin)
+async def me(
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    u = (
+        db.query(User)
+        .options(joinedload(User.group))
+        .filter(User.id == current.id)
+        .first()
+    )
+    if not u:
+        raise HTTPException(status_code=401, detail="User not found")
+    return MeOut(
+        username=u.username,
+        is_admin=u.is_admin,
+        group_id=u.group_id,
+        group_name=u.group.name if u.group else None,
+    )
 
 
 @router.post("/login", response_model=TokenResponse)

@@ -23,12 +23,13 @@ GEMINI_WS_URL = (
 # English-only instructions for the Live model (systemInstruction.parts).
 SYSTEM_INSTRUCTION = (
     "You extract Egyptian/Arabic license plates from spoken Arabic audio. "
-    "Return JSON ONLY (per SYSTEM_PROMPT). No markdown, no prose, no extra keys. "
+    "Return JSON ONLY (per SYSTEM_PROMPT). No markdown, no prose; only keys allowed there (plate/plates/moving). "
     "The user usually spells letters one-by-one, then digits, e.g. 'و ص ر 3424'. "
     "If you hear Arabic letter names (واو/صاد/راء/حاء/هاء/عين/غين/قاف/كاف/...), map each to exactly ONE Arabic plate letter. "
     "Never output Latin letters in JSON (no 'h' etc.). If audio sounds like an English letter name, treat it as an Arabic letter-name cue, not Latin text. "
     "Do NOT expand a spoken letter into a full Arabic word in the output (e.g. never output 'الف' instead of 'ا'). "
     "If audio is ambiguous/low confidence, return {\"plate\":null} instead of guessing. "
+    "If the speaker says the plate is «متحرك» (moving / not parked), set \"moving\": true for that plate; otherwise false. "
     "Each user/model turn is independent: do not carry over or repeat a plate from an earlier turn unless clearly re-spoken in the current turn. "
     "Plate constraints are strict: letters must never exceed 3 Arabic letters, digits must never exceed 4 numbers. "
     "Preferred format is 3 letters + 4 digits when clearly heard. "
@@ -44,9 +45,9 @@ SYSTEM_INSTRUCTION = (
 )
 
 SYSTEM_PROMPT = """Output must be ONLY one of:
-{"plate":"<letters> <digits>"}
-{"plates":[{"plate":"<letters> <digits>"}, ...]}
-{"plate":null}
+{"plate":"<letters> <digits>","moving":false}
+{"plates":[{"plate":"<letters> <digits>","moving":false}, ...]}
+{"plate":null,"moving":false}
 
 Rules:
 1) Keep Arabic letters exactly as spoken for plate letters.
@@ -54,13 +55,14 @@ Rules:
 3) Do NOT merge extra letters; keep only plate letters.
 4) Letters block then one ASCII space then digits block.
 5) Digits must be Western 0-9 only.
-6) No markdown, no extra keys, no extra text.
+6) No markdown, no prose, no keys other than plate/plates/moving.
 7) The letters block must contain Arabic letters ONLY (Unicode Arabic letters). Never output Latin letters.
 8) Letters count must be 1..3 (preferred 3). Never output >3 letters.
 9) Digits count must be 1..4 (preferred 4). Never output >4 digits.
 10) If you hear a letter name, convert it to one Arabic character only (e.g. عين/عن -> ع).
+11) Boolean "moving" is required on every object that has "plate" (false if parked / not said).
 
-Valid example: {"plate":"وصر 4923"}"""
+Valid example: {"plate":"وصر 4923","moving":false}"""
 
 # Live-capable model IDs come only from the admin Gemini catalog (channel=live);
 # the WebSocket client sends the chosen model_id after /api/config/gemini-models.

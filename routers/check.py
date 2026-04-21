@@ -1,17 +1,22 @@
 import asyncio
+import base64
 import io
 import json
 import logging
 import os
 import tempfile
 import time
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 import openpyxl
+from sqlalchemy.orm import Session
 
+from db import get_db
 from dependencies.auth import get_current_user
+from models import UserGroup
 from models.user import User
 from config import settings
 from services.check_match import run_check_plates_sync
@@ -20,7 +25,7 @@ from services.check_postgres import (
     CHECK_PG_MAX_ROWS_PER_USER,
     collect_gps_vehicles_stored_sync,
     delete_import_sync,
-    get_stored_large_meta_sync,
+    get_stored_large_meta_for_check_sync,
     import_large_workbook_sync,
     list_imports_sync,
     run_check_plates_postgres_sync,
@@ -40,12 +45,6 @@ from services.check_queue import (
     enqueue_check_job,
     queue_depth,
 )
-from services.check_result_storage import (
-    job_id_valid,
-    result_path_for_job,
-    schedule_result_file_cleanup,
-    write_result_file_sync,
-)
 from services.excel_utils import (
     find_best_sheet_async,
     load_workbook_from_bytes_async,
@@ -64,6 +63,10 @@ from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
 
 
 logger = logging.getLogger(__name__)
+_JOB_ID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 _RATE_LIMIT_LOCK = asyncio.Lock()
 _USER_CHECK_TS: dict[int, list[float]] = {}
@@ -79,6 +82,43 @@ router = APIRouter(
 def _check_pg_dsn() -> str | None:
     u = (settings.check_postgres_dsn or "").strip()
     return u or None
+
+
+def _job_id_valid(job_id: str) -> bool:
+    return bool(_JOB_ID_RE.match((job_id or "").strip()))
+
+
+def _group_context(db: Session, user: User) -> tuple[str | None, bool]:
+    u = db.get(User, user.id)
+    if not u or not getattr(u, "group_id", None):
+        return None, False
+    g = db.get(UserGroup, u.group_id)
+    return (g.name if g else None), True
+
+
+def _group_rows_limit_for_user(db: Session, user: User) -> int | None:
+    u = db.get(User, user.id)
+    if not u or not getattr(u, "group_id", None):
+        return None
+    g = db.get(UserGroup, u.group_id)
+    if not g:
+        return None
+    try:
+        v = int(getattr(g, "max_stored_large_rows", 0) or 0)
+    except Exception:
+        return None
+    return v if v > 0 else None
+
+
+def _user_rows_limit_for_user(db: Session, user: User) -> int | None:
+    u = db.get(User, user.id)
+    if not u:
+        return None
+    try:
+        v = int(getattr(u, "max_stored_large_rows", 0) or 0)
+    except Exception:
+        return None
+    return v if v > 0 else None
 
 
 def _form_bool(raw: str) -> bool:
@@ -325,19 +365,26 @@ async def check_temp_query(
 
 
 @router.get("/check/stored-large-meta")
-async def check_stored_large_meta(current_user: User = Depends(get_current_user)):
+async def check_stored_large_meta(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     dsn = _check_pg_dsn()
     if not dsn:
         raise HTTPException(
             status_code=503,
             detail="CHECK_POSTGRES_URL is not configured.",
         )
+    gn, ig = _group_context(db, current_user)
     try:
         meta = await asyncio.to_thread(
-            get_stored_large_meta_sync, dsn, current_user.id, current_user.is_admin
+            get_stored_large_meta_for_check_sync,
+            dsn,
+            current_user.id,
+            current_user.is_admin,
         )
     except Exception:
-        logger.exception("get_stored_large_meta_sync failed")
+        logger.exception("get_stored_large_meta_for_check_sync failed")
         raise HTTPException(
             status_code=500,
             detail="Failed to read stored large file metadata.",
@@ -351,13 +398,19 @@ async def check_stored_large_meta(current_user: User = Depends(get_current_user)
                 "row_count": 0,
                 "updated_at": None,
                 "imports": [],
+                "group_name": gn,
+                "in_group": ig,
             }
         )
-    return JSONResponse({"has_data": True, **meta})
+    return JSONResponse(
+        {"has_data": True, **meta, "group_name": gn, "in_group": ig}
+    )
 
 
 @router.get("/check/stored-imports")
-async def check_stored_imports_list(current_user: User = Depends(get_current_user)):
+async def check_stored_imports_list(
+    current_user: User = Depends(get_current_user),
+):
     dsn = _check_pg_dsn()
     if not dsn:
         raise HTTPException(
@@ -414,6 +467,7 @@ async def check_import_large(
     large_col: str = Form(""),
     large_sheet: str = Form(""),
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     dsn = _check_pg_dsn()
     if not dsn:
@@ -429,6 +483,8 @@ async def check_import_large(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     try:
+        grp_limit = _group_rows_limit_for_user(db, current_user)
+        usr_limit = _user_rows_limit_for_user(db, current_user)
         summary = await asyncio.to_thread(
             import_large_workbook_sync,
             dsn,
@@ -439,6 +495,8 @@ async def check_import_large(
             large_col.strip(),
             large_sheet.strip(),
             large_file.filename or "upload.xlsx",
+            grp_limit,
+            usr_limit,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -634,38 +692,22 @@ async def process_check_queue_item(item: dict) -> None:
                 item["small_export_cols"],
             )
         if raw["kind"] == "xlsx":
-            try:
-                await asyncio.to_thread(
-                    write_result_file_sync, job_id, raw["content"]
-                )
-            except Exception:
-                logger.exception("Failed to write check result file job_id=%s", job_id)
-                await job_save(
-                    job_id,
-                    {
-                        "status": "error",
-                        "data": None,
-                        "detail": "تعذّر حفظ ملف النتيجة على الخادم.",
-                    },
-                    ttl_seconds=TTL_TERMINAL_SEC,
-                )
-            else:
-                data_out: dict = {
-                    "kind": "xlsx",
-                    "filename": raw["filename"],
-                    "storage": "file",
-                }
-                if raw.get("preview"):
-                    data_out["preview"] = raw["preview"]
-                await job_save(
-                    job_id,
-                    {
-                        "status": "done",
-                        "data": data_out,
-                    },
-                    ttl_seconds=TTL_TERMINAL_SEC,
-                )
-                schedule_result_file_cleanup(job_id, float(TTL_TERMINAL_SEC))
+            data_out: dict = {
+                "kind": "xlsx",
+                "filename": raw["filename"],
+                "storage": "inline",
+                "content_b64": base64.b64encode(raw["content"]).decode("ascii"),
+            }
+            if raw.get("preview"):
+                data_out["preview"] = raw["preview"]
+            await job_save(
+                job_id,
+                {
+                    "status": "done",
+                    "data": data_out,
+                },
+                ttl_seconds=TTL_TERMINAL_SEC,
+            )
         else:
             await job_save(
                 job_id,
@@ -858,8 +900,8 @@ async def check_status(job_id: str):
 
 @router.get("/check/result/{job_id}")
 async def check_download_result(job_id: str):
-    """Download فرز Excel from disk (job JSON only holds metadata + preview)."""
-    if not job_id_valid(job_id):
+    """Download فرز Excel from inline job payload (no server-side result files)."""
+    if not _job_id_valid(job_id):
         raise HTTPException(status_code=400, detail="Invalid job id")
     row = await job_get(job_id)
     if not row:
@@ -867,16 +909,19 @@ async def check_download_result(job_id: str):
     if row.get("status") != "done":
         raise HTTPException(status_code=409, detail="Result not ready")
     data = row.get("data") or {}
-    if data.get("kind") != "xlsx" or data.get("storage") != "file":
+    if data.get("kind") != "xlsx":
         raise HTTPException(status_code=404, detail="No downloadable file for this job")
-    path = result_path_for_job(job_id)
-    if path is None or not path.is_file():
-        raise HTTPException(status_code=404, detail="Result file expired or missing")
+    b64 = str(data.get("content_b64") or "")
+    if not b64:
+        raise HTTPException(status_code=404, detail="Result content missing")
+    try:
+        content = base64.b64decode(b64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Result content corrupted")
     fname = data.get("filename") or "التطابقات.xlsx"
-    return FileResponse(
-        path,
-        filename=fname,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
+    return JSONResponse(
+        {
+            "filename": fname,
+            "content_b64": base64.b64encode(content).decode("ascii"),
+        }
     )

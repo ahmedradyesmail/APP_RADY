@@ -19,11 +19,6 @@ ENV/
 # ── Legacy local key file (do not commit secrets) ─────────
 data/provider_keys.json
 
-# ── فرز: temporary Excel outputs on disk ─────────────────
-data/check_results/
-# ── تفريغ صوتي: JSON results on disk ───────────────────
-data/transcribe_results/
-
 # ── Database ─────────────────────────────────────────────
 app.db
 *.db

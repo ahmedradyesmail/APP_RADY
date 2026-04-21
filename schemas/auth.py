@@ -20,3 +20,5 @@ class TokenResponse(BaseModel):
 class MeOut(BaseModel):
     username: str
     is_admin: bool
+    group_id: int | None = None
+    group_name: str | None = None

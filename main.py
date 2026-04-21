@@ -12,8 +12,8 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from config import settings
-from db import Base, apply_sqlite_migrations, engine
-from models import User
+from db import Base, apply_postgres_auth_migrations, apply_sqlite_migrations, engine
+from models import User, UserGroup  # noqa: F401 — register UserGroup for create_all
 from routers.audio import router as audio_router
 from routers.excel import router as excel_router
 from routers.check import router as check_router
@@ -107,6 +107,7 @@ def _startup_db_sync() -> None:
         else:
             raise
     apply_sqlite_migrations()
+    apply_postgres_auth_migrations()
     with Session(engine) as db:
         bootstrap_admin(db)
 

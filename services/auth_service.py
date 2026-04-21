@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from models import RefreshToken, User
+from models import RefreshToken, User, UserGroup
 from services.security import (
     create_access_token,
     create_refresh_token,
@@ -144,10 +144,17 @@ def create_user(
     username: str,
     password: str,
     is_admin: bool = False,
+    group_id: int | None = None,
+    max_stored_large_rows: int = 3_000_000,
 ) -> User:
     existing = db.query(User).filter(User.username == username).first()
     if existing:
         raise AuthServiceError(status_code=409, detail="Username already exists")
+
+    if group_id is not None:
+        g = db.get(UserGroup, group_id)
+        if g is None:
+            raise AuthServiceError(status_code=400, detail="المجموعة غير موجودة")
 
     user = User(
         username=username,
@@ -155,6 +162,8 @@ def create_user(
         is_admin=is_admin,
         is_active=True,
         device_id=None,
+        group_id=group_id,
+        max_stored_large_rows=int(max_stored_large_rows),
     )
     db.add(user)
     db.commit()

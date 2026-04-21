@@ -1,12 +1,12 @@
 import asyncio
 import json
 import logging
+import re
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from dependencies.auth import get_current_user
-from services.check_result_storage import job_id_valid
 from services.gemini import process_audio
 from services.gemini_catalog import is_gemini_model_allowed_sync
 from services.job_store import (
@@ -18,15 +18,18 @@ from services.job_store import (
     schedule_job_cleanup,
 )
 from services.provider_keys import async_gemini_try_all, has_any_gemini_keys
-from services.transcribe_result_storage import (
-    schedule_transcribe_file_cleanup,
-    transcribe_path_for_job,
-    write_transcribe_json_sync,
-)
 from services.upload_security import MAX_AUDIO_BYTES, read_upload_with_limit
 
 
 logger = logging.getLogger(__name__)
+_JOB_ID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+def _job_id_valid(job_id: str) -> bool:
+    return bool(_JOB_ID_RE.match((job_id or "").strip()))
 
 # Limit concurrent Gemini/audio jobs per worker (reduces API spikes and memory).
 _AUDIO_JOB_CONCURRENCY = 8
@@ -91,33 +94,19 @@ async def _audio_job_task(
                 raise RuntimeError("gemini_failed")
 
             payload = {"plates": plates, "total": len(plates)}
-            try:
-                await asyncio.to_thread(write_transcribe_json_sync, job_id, payload)
-            except Exception:
-                logger.exception("Failed to write transcribe result file job_id=%s", job_id)
-                await job_save(
-                    job_id,
-                    {
-                        "status": "error",
-                        "data": None,
-                        "detail": "تعذّر حفظ نتيجة التفريغ على الخادم.",
+            await job_save(
+                job_id,
+                {
+                    "status": "done",
+                    "data": {
+                        "kind": "transcribe",
+                        "storage": "inline",
+                        "payload": payload,
+                        "total": len(plates),
                     },
-                    ttl_seconds=TTL_TERMINAL_SEC,
-                )
-            else:
-                await job_save(
-                    job_id,
-                    {
-                        "status": "done",
-                        "data": {
-                            "kind": "transcribe",
-                            "storage": "file",
-                            "total": len(plates),
-                        },
-                    },
-                    ttl_seconds=TTL_TERMINAL_SEC,
-                )
-                schedule_transcribe_file_cleanup(job_id, float(TTL_TERMINAL_SEC))
+                },
+                ttl_seconds=TTL_TERMINAL_SEC,
+            )
         except Exception as e:
             logger.exception("Audio processing failed")
             detail = "An internal error occurred. Please try again."
@@ -200,8 +189,8 @@ async def transcribe_status(job_id: str):
 
 @router.get("/transcribe/result/{job_id}")
 async def transcribe_result_payload(job_id: str):
-    """Full plates JSON from disk (job row only references this file)."""
-    if not job_id_valid(job_id):
+    """Full plates JSON from inline job payload."""
+    if not _job_id_valid(job_id):
         raise HTTPException(status_code=400, detail="Invalid job id")
     row = await job_get(job_id)
     if not row:
@@ -209,18 +198,8 @@ async def transcribe_result_payload(job_id: str):
     if row.get("status") != "done":
         raise HTTPException(status_code=409, detail="Result not ready")
     meta = row.get("data") or {}
-    if meta.get("storage") == "file" and meta.get("kind") == "transcribe":
-        path = transcribe_path_for_job(job_id)
-        if path is None or not path.is_file():
-            raise HTTPException(status_code=404, detail="Result file expired or missing")
-        try:
-            obj = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            logger.exception("transcribe result read failed job_id=%s", job_id)
-            raise HTTPException(
-                status_code=500,
-                detail="An internal error occurred. Please try again.",
-            )
-        return JSONResponse(obj)
-    # Legacy jobs: plates still inline in Redis/memory
+    if meta.get("kind") == "transcribe":
+        payload = meta.get("payload")
+        if isinstance(payload, dict):
+            return JSONResponse(payload)
     return JSONResponse(meta)

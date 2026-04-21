@@ -177,26 +177,36 @@ def _strip_markdown_json_fence(text: str) -> str:
     return t
 
 
-def _parse_plate_payload(blob: str) -> list[Any]:
+def _parse_plate_payload(blob: str) -> list[dict[str, Any]]:
     """
-    Parse Gemini reply: single object {"plate": ...}, array of objects,
-    or {"plates": [...]}. Returns list of plate values (str or None).
+    Parse Gemini JSON: objects with plate + optional moving.
+    Returns [{"plate": str|None, "moving": bool}, ...].
     """
     blob = blob.strip()
     if not blob:
         return []
 
-    def collect_from_obj(obj: dict) -> list[Any]:
-        out: list[Any] = []
+    def collect_from_obj(obj: dict) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
         if "plate" in obj:
-            out.append(obj.get("plate"))
+            out.append(
+                {
+                    "plate": obj.get("plate"),
+                    "moving": bool(obj.get("moving")),
+                }
+            )
         inner = obj.get("plates")
         if isinstance(inner, list):
             for el in inner:
                 if isinstance(el, dict) and "plate" in el:
-                    out.append(el.get("plate"))
+                    out.append(
+                        {
+                            "plate": el.get("plate"),
+                            "moving": bool(el.get("moving")),
+                        }
+                    )
                 elif isinstance(el, str):
-                    out.append(el)
+                    out.append({"plate": el, "moving": False})
         return out
 
     try:
@@ -221,12 +231,17 @@ def _parse_plate_payload(blob: str) -> list[Any]:
                 return []
 
     if isinstance(data, list):
-        plates: list[Any] = []
+        plates: list[dict[str, Any]] = []
         for item in data:
             if isinstance(item, dict):
-                plates.append(item.get("plate"))
+                plates.append(
+                    {
+                        "plate": item.get("plate"),
+                        "moving": bool(item.get("moving")),
+                    }
+                )
             elif isinstance(item, str):
-                plates.append(item)
+                plates.append({"plate": item, "moving": False})
         return plates
     if isinstance(data, dict):
         return collect_from_obj(data)
@@ -264,15 +279,16 @@ def _sanitize_live_plate_text(plate: Any) -> str | None:
     return f"{letters} {digits}"
 
 
-async def _emit_plate_result(
-    websocket: WebSocket, session: SessionState, plate: Any
-) -> None:
-    normalized_plate = _sanitize_live_plate_text(plate)
-    if not normalized_plate:
-        await _send(websocket, {"type": "no_plate", "data": {}})
-        return
-    raw = normalized_plate
-    plate_str = format_plate_display(raw) or raw
+def _plate_value_from_entry(entry: Any) -> Any:
+    if isinstance(entry, dict):
+        return entry.get("plate")
+    return entry
+
+
+async def _lookup_plate_outcome(
+    session: SessionState, raw: str
+) -> tuple[bool | None, dict[str, Any], str, str]:
+    """Sanitized plate text -> (found, safe_row, matched_column, hit_sheet)."""
     if session.check_temp_enabled:
         found = await asyncio.to_thread(
             temp_plate_exists_sync,
@@ -282,16 +298,57 @@ async def _emit_plate_result(
             session_token=session.check_temp_session_token,
             plate_text=raw,
         )
+        return (bool(found), {}, session.excel_plate_column or "", "postgres_temp")
+    if session.excel_loaded:
+        if not (session.excel_plate_column or "").strip():
+            return (None, {}, "", "")
+        found, row_data = lookup_plate(session.excel_plates, raw)
+        safe_row = {
+            k: (str(v) if v is not None else None)
+            for k, v in row_data.items()
+            if not str(k).startswith("_")
+        }
+        matched = row_data.get("_matched_column", "") if found else ""
+        hit_sheet = row_data.get("_sheet", "") if found else ""
+        return (bool(found), safe_row, matched, hit_sheet)
+    return (None, {}, "", "")
+
+
+async def _emit_check_session_sync(
+    websocket: WebSocket, items: list[dict[str, Any]]
+) -> None:
+    if not items:
+        return
+    await _send(
+        websocket,
+        {"type": "check_session_sync", "data": {"items": items}},
+    )
+
+
+async def _emit_plate_result(
+    websocket: WebSocket, session: SessionState, plate: Any
+) -> None:
+    pv = _plate_value_from_entry(plate)
+    normalized_plate = _sanitize_live_plate_text(pv)
+    if not normalized_plate:
+        await _send(websocket, {"type": "no_plate", "data": {}})
+        return
+    raw = normalized_plate
+    plate_str = format_plate_display(raw) or raw
+    if session.check_temp_enabled:
+        found, safe_row, matched, hit_sheet = await _lookup_plate_outcome(
+            session, raw
+        )
         await _send(
             websocket,
             {
                 "type": "plate_result",
                 "data": {
                     "plate": plate_str,
-                    "found": bool(found),
-                    "details": {},
-                    "compare_column": session.excel_plate_column or "",
-                    "sheet": "postgres_temp",
+                    "found": found,
+                    "details": safe_row,
+                    "compare_column": matched,
+                    "sheet": hit_sheet,
                     "index_count": 0,
                 },
             },
@@ -314,21 +371,16 @@ async def _emit_plate_result(
                 },
             )
             return
-        found, row_data = lookup_plate(session.excel_plates, raw)
-        safe_row = {
-            k: (str(v) if v is not None else None)
-            for k, v in row_data.items()
-            if not str(k).startswith("_")
-        }
-        matched = row_data.get("_matched_column", "") if found else ""
-        hit_sheet = row_data.get("_sheet", "") if found else ""
+        found, safe_row, matched, hit_sheet = await _lookup_plate_outcome(
+            session, raw
+        )
         await _send(
             websocket,
             {
                 "type": "plate_result",
                 "data": {
                     "plate": plate_str,
-                    "found": bool(found),
+                    "found": found,
                     "details": safe_row,
                     "compare_column": matched,
                     "sheet": hit_sheet,
@@ -357,7 +409,8 @@ async def _emit_model_plate_if_new(
     websocket: WebSocket, session: SessionState, plate: Any
 ) -> bool:
     """Deduplicate partial/final model emissions for the same normalized plate(s) per turn."""
-    normalized_plate = _sanitize_live_plate_text(plate)
+    pv = _plate_value_from_entry(plate)
+    normalized_plate = _sanitize_live_plate_text(pv)
     if not normalized_plate:
         return False
     key = normalize_plate(normalized_plate)
@@ -381,13 +434,34 @@ async def _process_plate_text(
         await _send(websocket, {"type": "raw_text", "data": text})
         return
 
-    valid = [p for p in plates if p is not None and str(p).strip()]
+    valid = [
+        p
+        for p in plates
+        if p.get("plate") is not None and str(p.get("plate") or "").strip()
+    ]
     if not valid:
         await _send(websocket, {"type": "no_plate", "data": {}})
         return
 
-    for plate in valid:
-        await _emit_model_plate_if_new(websocket, session, plate)
+    already_emitted = set(session.model_plate_norm_keys)
+    sync_items: list[dict[str, Any]] = []
+
+    for entry in valid:
+        raw = _sanitize_live_plate_text(_plate_value_from_entry(entry))
+        if not raw:
+            continue
+        plate_str = format_plate_display(raw) or raw
+        moving = bool(entry.get("moving"))
+        found, _, _, _ = await _lookup_plate_outcome(session, raw)
+        sync_items.append(
+            {"plate": plate_str, "found": found, "moving": moving}
+        )
+        key = normalize_plate(raw)
+        if key and key not in already_emitted:
+            await _emit_model_plate_if_new(websocket, session, raw)
+
+    if sync_items:
+        await _emit_check_session_sync(websocket, sync_items)
 
 
 async def handle_client_messages(
