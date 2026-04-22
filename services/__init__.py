@@ -1,4 +1,9 @@
-from .plate_utils import normalize_plate_value, normalize_plate, auto_detect_plate_col
+from .plate_utils import (
+    auto_detect_plate_col,
+    format_plate_display,
+    normalize_plate,
+    normalize_plate_value,
+)
 from .excel_utils import (
     load_workbook_maybe_encrypted,
     load_workbook_maybe_encrypted_async,
@@ -14,6 +19,7 @@ from .gemini import process_audio
 __all__ = [
     "normalize_plate_value",
     "normalize_plate",
+    "format_plate_display",
     "auto_detect_plate_col",
     "load_workbook_maybe_encrypted",
     "load_workbook_maybe_encrypted_async",

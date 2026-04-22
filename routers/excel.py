@@ -30,8 +30,8 @@ _EXPORT_HEADERS = [
     "تاريخ التسجيل",
     "الحي",
     "الشارع",
-    "تفاصيل الموقع",
-    "نوع المركبة",
+    "ملاحظات",
+    "نوع السيارة",
     "اسم المسجّل",
     "موقع الشارع",
 ]
@@ -183,8 +183,8 @@ async def export_field_check(
         "تاريخ التسجيل",
         "الحي",
         "الشارع",
-        "تفاصيل الموقع",
-        "نوع المركبة",
+        "ملاحظات",
+        "نوع السيارة",
         "اسم المسجّل",
         "موقع الشارع",
     ]
@@ -293,6 +293,21 @@ def _parse_excel_sync(content: bytes) -> tuple[list[dict], int]:
                     return cell_at(i)
             return ""
 
+        def col_by_substrings(substrings: tuple[str, ...], fallback: int) -> str:
+            """First header cell containing any substring wins (order matters for legacy vs new names)."""
+            for sub in substrings:
+                if not sub:
+                    continue
+                for i, h in enumerate(headers):
+                    hs = str(h).strip() if h else ""
+                    if not hs:
+                        continue
+                    if hs == "موقع الشارع" or hs.startswith("موقع الشارع"):
+                        continue
+                    if sub in hs:
+                        return cell_at(i)
+            return cell_at(fallback)
+
         # Fallbacks: new export = plate,gps,date,district,street,... ; legacy (no الحي) matches headers first.
         rows_out.append({
             "full_plate":       col("اللوحة", 0),
@@ -300,8 +315,12 @@ def _parse_excel_sync(content: bytes) -> tuple[list[dict], int]:
             "recording_date":   col("التسجيل", 2),
             "district_name":    col_district(),
             "street_name":      col("الشارع", 4),
-            "location_details": col("الموقع", 5),
-            "vehicle_type":     col("المركبة", 6),
+            "location_details": col_by_substrings(
+                ("ملاحظات", "تفاصيل الموقع", "الموقع"), 5
+            ),
+            "vehicle_type":     col_by_substrings(
+                ("نوع السيارة", "نوع المركبة", "المركبة"), 6
+            ),
             "recorder_name":    col("المسجّل", 7),
             "street_location":  col_street_location(8),
             "notes":            col("ملاحظات", -1),

@@ -19,9 +19,10 @@ from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from services.plate_utils import (
-    normalize_plate,
     auto_detect_plate_col,
     auto_detect_plate_col_from_row3,
+    format_plate_display,
+    normalize_plate,
 )
 from services.excel_utils import (
     load_workbook_maybe_encrypted,
@@ -343,6 +344,15 @@ def run_check_plates_sync(
             if not norm:
                 continue
             small_vals = [(row[i] if i < len(row) else None) for i in se_idx]
+            if sc in se_cols:
+                pi = se_cols.index(sc)
+                sv = list(small_vals)
+                disp = format_plate_display(norm) or (
+                    str(rp).strip() if rp is not None else ""
+                )
+                if 0 <= pi < len(sv):
+                    sv[pi] = disp
+                small_vals = tuple(sv)
             large_candidates = []
             cur = sqlite_con.execute(
                 "SELECT payload_json FROM plate_idx WHERE plate_key = ?",

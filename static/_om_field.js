@@ -12,6 +12,13 @@ let omHasStoredImports=false;
 const OM_LOCAL_DB_NAME='om_local_sheets_v1';
 const OM_LOCAL_DB_STORE='sheets';
 const OM_FIELD_MATCH_KEY='field_match_result';
+/** تطابق أسماء أعمدة التفريغ مع الخادم (check_postgres.LARGE_SHEET_CANONICAL_ORDER) */
+const OM_LARGE_EXPORT_COLS_LS='omCheckLargeExportCols_v1';
+var OM_LARGE_EXPORT_CANONICAL=[
+  '\u0631\u0642\u0645 \u0627\u0644\u0644\u0648\u062D\u0629','GPS','\u062A\u0627\u0631\u064A\u062E \u0627\u0644\u062A\u0633\u062C\u064A\u0644',
+  '\u0627\u0644\u062D\u064A','\u0627\u0644\u0634\u0627\u0631\u0639','\u0645\u0644\u0627\u062D\u0638\u0627\u062A','\u0646\u0648\u0639 \u0627\u0644\u0633\u064A\u0627\u0631\u0629',
+  '\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062C\u0651\u0644','\u0645\u0648\u0642\u0639 \u0627\u0644\u0634\u0627\u0631\u0639'
+];
 
 function omGetSmallPlatesTextLines(){
   var ta=document.getElementById('omSmallPlatesText');
@@ -462,13 +469,48 @@ function omClearCheckExportList(side){
   const el=document.getElementById(id);
   if(el) el.innerHTML='';
 }
-/** مراجع عربية لأعمدة المركبة الأربعة + صيغ قريبة (لون أساسي، نوع تسجيل لوحة، طراز، صانع). */
+/** undefined = لم يُحفظ بعد؛ [] = اختيار صريح بلا أعمدة */
+function omReadSavedLargeExportCols(){
+  try{
+    if(localStorage.getItem(OM_LARGE_EXPORT_COLS_LS)===null) return undefined;
+    var raw=localStorage.getItem(OM_LARGE_EXPORT_COLS_LS)||'[]';
+    var o=JSON.parse(raw);
+    if(!Array.isArray(o)) return undefined;
+    var allow=new Set(OM_LARGE_EXPORT_CANONICAL);
+    return o.map(function(x){ return String(x||''); }).filter(function(x){ return allow.has(x); });
+  }catch(_e){ return undefined; }
+}
+function omPersistLargeExportCols(){
+  try{
+    var by={};
+    document.querySelectorAll('.check-export-cb.check-export-large').forEach(function(b){
+      by[String(b.value||'')]=!!b.checked;
+    });
+    var ordered=[];
+    OM_LARGE_EXPORT_CANONICAL.forEach(function(c){
+      if(by[c]) ordered.push(c);
+    });
+    localStorage.setItem(OM_LARGE_EXPORT_COLS_LS,JSON.stringify(ordered));
+  }catch(_e){}
+}
+function omLargeHeaderPresentInList(canon,headers){
+  var n=omNormHeaderForSim(canon);
+  for(var i=0;i<(headers||[]).length;i++){
+    if(omNormHeaderForSim(headers[i])===n) return true;
+  }
+  return false;
+}
+/** مراجع عربية لأعمدة المركبة الأربعة + صيغ قريبة + أسماء إضافية (ASTASSETS، النوع، اللون، المدينة، اللون بالإنجليزي). */
 var OM_VEHICLE_EXPORT_SEEDS=[
   '\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0629 \u0627\u0644\u0623\u0633\u0627\u0633\u064A','\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0647 \u0627\u0644\u0627\u0633\u0627\u0633\u064A','\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0629 \u0627\u0644\u0627\u0633\u0627\u0633\u064A','\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0647 \u0627\u0644\u0623\u0633\u0627\u0633\u064A',
   '\u0646\u0648\u0639 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u0644\u0648\u062D\u0629','\u0646\u0648\u0639 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u0644\u0648\u062D\u0647',
   '\u0637\u0631\u0627\u0632 \u0627\u0644\u0645\u0631\u0643\u0628\u0629','\u0637\u0631\u0627\u0632 \u0627\u0644\u0645\u0631\u0643\u0628\u0647',
   '\u0635\u0627\u0646\u0639 \u0627\u0644\u0645\u0631\u0643\u0628\u0629','\u0635\u0627\u0646\u0639 \u0627\u0644\u0645\u0631\u0643\u0628\u0647',
-  '\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0629','\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0647'
+  '\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0629','\u0644\u0648\u0646 \u0627\u0644\u0645\u0631\u0643\u0628\u0647',
+  'ASTASSETS',
+  '\u0627\u0644\u0646\u0648\u0639','\u0627\u0644\u0644\u0648\u0646','\u0627\u0644\u0645\u062F\u064A\u0646\u0629',
+  '\u0627\u0644\u0644\u0648\u0646 \u0628\u0627\u0644\u0625\u0646\u062C\u0644\u064A\u0632\u064A','\u0644\u0648\u0646 \u0628\u0627\u0644\u0625\u0646\u062C\u0644\u064A\u0632\u064A','\u0627\u0644\u0644\u0648\u0646 \u0628\u0627\u0644\u0627\u0646\u062C\u0644\u064A\u0632\u064A','\u0644\u0648\u0646 \u0628\u0627\u0644\u0627\u0646\u062C\u0644\u064A\u0632\u064A',
+  '\u0627\u0644\u0644\u0648\u0646 \u0627\u0644\u0625\u0646\u062C\u0644\u064A\u0632\u064A','\u0644\u0648\u0646 \u0627\u0644\u0625\u0646\u062C\u0644\u064A\u0632\u064A','\u0627\u0644\u0644\u0648\u0646 \u0627\u0644\u0627\u0646\u062C\u0644\u064A\u0632\u064A','\u0644\u0648\u0646 \u0627\u0644\u0627\u0646\u062C\u0644\u064A\u0632\u064A'
 ];
 var OM_COLOR_TOKENS=['ابيض','أبيض','ازرق','أزرق','احمر','أحمر','اسود','أسود','فضي','رمادي','رصاصي','ذهبي','اخضر','أخضر','بني'];
 var OM_MAKER_TOKENS=['تويوتا','مرسيدس','هيونداي','كيا','نيسان','هوندا','فورد','شيفروليه','جيب','بي ام دبليو','bmw','audi','لكزس'];
@@ -551,7 +593,46 @@ function omVehicleExportContentAutoPick(header,samplesMap){
   return hits>=2 && (hits/Math.max(1,total))>=0.2;
 }
 function omRebuildCheckExportChoices(side,headers,defaultChecked,samplesMap){
-  if(side==='large') return;
+  if(side==='large'){
+    const el=document.getElementById('omLargeExportList');
+    if(!el) return;
+    el.innerHTML='';
+    const hdrs=headers||[];
+    const saved=omReadSavedLargeExportCols();
+    const useSaved=saved!==undefined;
+    const savedSet=useSaved?new Set(saved):null;
+    OM_LARGE_EXPORT_CANONICAL.forEach(function(canon){
+      const inStore=hdrs.length?omLargeHeaderPresentInList(canon,hdrs):true;
+      const lab=document.createElement('label');
+      lab.style.cssText='display:flex;align-items:center;gap:.45rem;font-size:.78rem;cursor:pointer;padding:.2rem 0 .2rem .4rem;border-left:3px solid rgba(14,165,233,.85);margin-left:.1rem';
+      if(!inStore&&hdrs.length){
+        lab.style.opacity='0.72';
+        lab.title='\u0627\u0644\u0639\u0645\u0648\u062F \u063A\u064A\u0631 \u0645\u062A\u0627\u062D \u0641\u064A \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u0645\u062E\u0632\u0646\u0629 \u0627\u0644\u062D\u0627\u0644\u064A\u0629\u061B \u0625\u0630\u0627 \u0627\u062E\u062A\u0631\u062A\u0647 \u064A\u0638\u0647\u0631 \u0639\u0646\u062F \u0648\u062C\u0648\u062F\u0647 \u0641\u064A \u0645\u0644\u0641.';
+      }
+      const cb=document.createElement('input');
+      cb.type='checkbox';
+      cb.value=canon;
+      cb.className='check-export-cb check-export-large';
+      if(useSaved){
+        cb.checked=savedSet.has(canon);
+      }else if(defaultChecked===false){
+        cb.checked=false;
+      }else if(hdrs.length){
+        cb.checked=inStore;
+      }else{
+        cb.checked=true;
+      }
+      cb.addEventListener('change',function(){ omPersistLargeExportCols(); });
+      const sp=document.createElement('span');
+      sp.textContent=canon;
+      sp.style.fontFamily='var(--mono)';
+      lab.appendChild(cb);
+      lab.appendChild(sp);
+      el.appendChild(lab);
+    });
+    if(!useSaved) omPersistLargeExportCols();
+    return;
+  }
   const id='omSmallExportList';
   const el=document.getElementById(id);
   if(!el) return;
@@ -579,7 +660,17 @@ function omRebuildCheckExportChoices(side,headers,defaultChecked,samplesMap){
   });
 }
 function omGetCheckExportColsJson(side){
-  if(side==='large') return '[]';
+  if(side==='large'){
+    var by={};
+    document.querySelectorAll('.check-export-cb.check-export-large').forEach(function(b){
+      by[String(b.value||'')]=!!b.checked;
+    });
+    var ordered=[];
+    OM_LARGE_EXPORT_CANONICAL.forEach(function(c){
+      if(by[c]) ordered.push(c);
+    });
+    return JSON.stringify(ordered);
+  }
   const boxes=document.querySelectorAll('.check-export-cb.check-export-'+side+':checked');
   if(!boxes.length) return '[]';
   return JSON.stringify([...boxes].map(b=>b.value));
@@ -633,10 +724,11 @@ async function omDetectColForSide(side){
       const res=await fetch('/api/check/stored-large-meta');
       const j=await res.json().catch(function(){return{};});
       omApplyGroupBanner(j);
-      if(!res.ok){ omSetBadge('large','notfound','\u26A0 '+(j.detail||res.statusText)); omHasStoredImports=false; omCheckRunReady(); return; }
+      if(!res.ok){ omSetBadge('large','notfound','\u26A0 '+(j.detail||res.statusText)); omHasStoredImports=false; omClearCheckExportList('large'); omCheckRunReady(); return; }
       if(!j.has_data||!j.headers||!j.headers.length){
         omHasStoredImports=false;
         omSetBadge('large','notfound','\u0644\u0627 \u0628\u064A\u0627\u0646\u0627\u062A');
+        omClearCheckExportList('large');
         omCheckRunReady();
         return;
       }
@@ -648,6 +740,7 @@ async function omDetectColForSide(side){
       const gs=document.getElementById('omGpsMatchSection');
       if(omCheckLargeHasGps){ gs.style.display=''; if(!document.getElementById('omGpsMyLat').value.trim())omRefreshCheckLoc(); }
       else{ gs.style.display='none'; }
+      omRebuildCheckExportChoices('large', j.headers || [], true, null);
     }catch(e){ omSetBadge('large','notfound','\u26A0'); omHasStoredImports=false; omApplyGroupBanner({}); }
     omCheckRunReady();
     return;
@@ -880,6 +973,12 @@ function omCheckCellDisplayHtml(header,val){
   }
   return esc(raw);
 }
+/** عرض أعمدة أوسع في معاينة التطابق (ملاحظات، إلخ) */
+function omMatchPreviewColClass(header){
+  var t=String(header||'');
+  if(/\u0645\u0644\u0627\u062D\u0638\u0627\u062A/.test(t)) return 'om-xls-col-notes';
+  return '';
+}
 /** معاينة الويب: عمود اللوحة (كبير/صغير) — يعتمد على plate_column_indices من الخادم ثم أسماء القوائم */
 function omMatchPreviewIsPlateColumn(idx,header,srcs,sec,previewRoot){
   if(sec&&Array.isArray(sec.plate_column_indices)&&sec.plate_column_indices.indexOf(idx)!==-1) return true;
@@ -919,7 +1018,9 @@ function omAppendMatchExcelSheet(host,sec,previewRoot){
     var cls=[];
     if(srcs[i]==='small') cls.push('om-xls-small');
     if(omMatchPreviewIsPlateColumn(i,h,srcs,sec,previewRoot)) cls.push('om-xls-plate');
-    if(cls.length) th.className=cls.join(' ');
+    var nc=omMatchPreviewColClass(h);
+    if(nc) cls.push(nc);
+    th.className=cls.filter(Boolean).join(' ');
     trh.appendChild(th);
   });
   theadEl.appendChild(trh);
@@ -932,7 +1033,9 @@ function omAppendMatchExcelSheet(host,sec,previewRoot){
       var cls=[];
       if(srcs[idx]==='small') cls.push('om-xls-small');
       if(omMatchPreviewIsPlateColumn(idx,hdrs[idx],srcs,sec,previewRoot)) cls.push('om-xls-plate');
-      if(cls.length) td.className=cls.join(' ');
+      var nc2=omMatchPreviewColClass(hdrs[idx]);
+      if(nc2) cls.push(nc2);
+      td.className=cls.filter(Boolean).join(' ');
       td.innerHTML=omCheckCellDisplayHtml(hdrs[idx],cell);
       tr.appendChild(td);
     });
@@ -1011,6 +1114,8 @@ function omRenderCheckMatchPreview(preview){
     var p=[];
     if(srcs[i]==='small') p.push('om-match-col-small');
     if(omMatchPreviewIsPlateColumn(i,preview.headers[i],srcs,null,preview)) p.push('om-match-col-plate');
+    var x=omMatchPreviewColClass(preview.headers[i]);
+    if(x) p.push(x);
     return p.length?' class="'+p.join(' ')+'"':'';
   }
   if(!preview.rows||!preview.rows.length){
@@ -1029,7 +1134,9 @@ function omRenderCheckMatchPreview(preview){
       var pc=['td-gps'];
       if(srcs[idx]==='small') pc.push('om-match-col-small');
       if(omMatchPreviewIsPlateColumn(idx,preview.headers[idx],srcs,null,preview)) pc.push('om-match-col-plate');
-      td.className=pc.join(' ');
+      var x2=omMatchPreviewColClass(preview.headers[idx]);
+      if(x2) pc.push(x2);
+      td.className=pc.filter(Boolean).join(' ');
       td.innerHTML=omCheckCellDisplayHtml(preview.headers[idx],cell);
       tr.appendChild(td);
     });

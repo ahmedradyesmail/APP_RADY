@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import io
 import itertools
-import json
 import logging
 import os
 import re
@@ -21,7 +20,6 @@ import psycopg
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from psycopg.rows import dict_row
-from psycopg.types.json import Json
 
 from services.check_match import (
     PREVIEW_MAX_ROWS,
@@ -33,6 +31,7 @@ from services.excel_utils import find_best_sheet, load_workbook_maybe_encrypted,
 from services.plate_utils import (
     auto_detect_plate_col,
     auto_detect_plate_col_from_row3,
+    format_plate_display,
     normalize_plate,
 )
 
@@ -40,9 +39,38 @@ logger = logging.getLogger(__name__)
 
 CHECK_PG_MAX_LARGE_BYTES = 15 * 1024 * 1024
 CHECK_PG_MAX_ROWS_PER_USER = 3_000_000
-GPS_HEADER = "GPS"
 # Max distinct plates per SQL round-trip (ANY(...)); avoids N queries per small-file row.
 _CHECK_PLATE_LOOKUP_BATCH = 2048
+
+# ترتيب ثابت مطابق لتصدير التفريغ — أعمدة حقيقية في Postgres (بدون JSONB).
+LARGE_SHEET_CANONICAL_ORDER: tuple[str, ...] = (
+    "رقم اللوحة",
+    "GPS",
+    "تاريخ التسجيل",
+    "الحي",
+    "الشارع",
+    "ملاحظات",
+    "نوع السيارة",
+    "اسم المسجّل",
+    "موقع الشارع",
+)
+
+_LARGE_SQL_COL_LIST = ", ".join(f'"{c}"' for c in LARGE_SHEET_CANONICAL_ORDER)
+
+_INSERT_LARGE_ROW_SQL = f"""
+INSERT INTO check_large_rows (
+    user_id, import_id, plate_normalized, {_LARGE_SQL_COL_LIST}
+) VALUES (%s, %s, %s, {", ".join(["%s"] * len(LARGE_SHEET_CANONICAL_ORDER))})
+"""
+
+_SELECT_LARGE_ROW_DATA_SQL = f"""
+SELECT import_id, plate_normalized, {_LARGE_SQL_COL_LIST}
+FROM check_large_rows
+WHERE plate_normalized = ANY(%s) AND import_id IS NOT NULL
+ORDER BY plate_normalized ASC, import_id ASC, id ASC
+"""
+
+_ADMIN_LARGE_ROW_SELECT_PREFIX = f"id, plate_normalized, {_LARGE_SQL_COL_LIST}"
 
 
 def _norm_header_sim(s: str) -> str:
@@ -60,8 +88,128 @@ def _norm_header_sim(s: str) -> str:
     return t
 
 
+_LARGE_HEADER_NORM_TO_CANONICAL: dict[str, str] = {}
+for _lbl in LARGE_SHEET_CANONICAL_ORDER:
+    _nk = _norm_header_sim(_lbl)
+    if _nk not in _LARGE_HEADER_NORM_TO_CANONICAL:
+        _LARGE_HEADER_NORM_TO_CANONICAL[_nk] = _lbl
+
+
+def _validate_large_import_headers(
+    raw_headers: list[Any],
+) -> tuple[dict[str, int] | None, str | None]:
+    """
+    السطر الأول: أي عمود بعنوان غير فارغ يجب أن يطابق أحد الأسماء المعتمدة (بعد التطبيع).
+    أعمدة ناقصة مسموحة (تُخزَّن NULL). أسماء زائدة/خاطئة تُرفض.
+    «رقم اللوحة» إلزامي.
+    """
+    lh = [str(h).strip() if h is not None else "" for h in raw_headers]
+    col_idx_by_canonical: dict[str, int] = {}
+    for idx, h in enumerate(lh):
+        if not h:
+            continue
+        nk = _norm_header_sim(h)
+        canonical = _LARGE_HEADER_NORM_TO_CANONICAL.get(nk)
+        if canonical is None:
+            allowed = "، ".join(LARGE_SHEET_CANONICAL_ORDER)
+            return None, (
+                f"عمود غير معتمد في السطر الأول: «{h}». الاسم لا يطابق الأعمدة المعتمدة. "
+                f"المسموح (مع تجاهل اختلاف الهمزات والتاء المربوطة والمسافات الزائدة): {allowed}."
+            )
+        if canonical in col_idx_by_canonical:
+            return None, (
+                f"عمود مكرر أو بمعنى مشابه لعمود آخر: «{canonical}» (العمود رقم {idx + 1})."
+            )
+        col_idx_by_canonical[canonical] = idx
+    if "رقم اللوحة" not in col_idx_by_canonical:
+        return None, (
+            "عمود «رقم اللوحة» إلزامي في السطر الأول (يمكن كتابته بصيغ قريبة مثل «رقم اللوحه»)."
+        )
+    return col_idx_by_canonical, None
+
+
+def _large_row_cell_values(
+    row: tuple[Any, ...], col_idx_by_canonical: dict[str, int]
+) -> tuple[Any, ...]:
+    out: list[Any] = []
+    for canon in LARGE_SHEET_CANONICAL_ORDER:
+        idx = col_idx_by_canonical.get(canon)
+        if idx is None:
+            out.append(None)
+        else:
+            cell = row[idx] if idx < len(row) else None
+            out.append(_jsonable_cell(cell))
+    return tuple(out)
+
+
+def _large_dict_from_pg_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {k: row.get(k) for k in LARGE_SHEET_CANONICAL_ORDER}
+
+
+def _sheet_headers_order_sorted(col_idx_by_canonical: dict[str, int]) -> list[str]:
+    """ترتيب أعمدة الشيت من اليسار لليمين (أسماء معتمدة)."""
+    return [
+        canon
+        for canon, _ in sorted(
+            col_idx_by_canonical.items(), key=lambda kv: int(kv[1])
+        )
+    ]
+
+
+def _parse_sheet_headers_order_pg(val: Any) -> list[str] | None:
+    if val is None:
+        return None
+    if isinstance(val, list):
+        out = [str(x).strip() for x in val if x is not None and str(x).strip()]
+        return out or None
+    return None
+
+
+def _union_sheet_headers_from_imports(imports: list[dict[str, Any]]) -> list[str]:
+    """اتحاد الأعمدة التي ظهرت في أي استيراد، مع الحفاظ على أول ترتيب ظهور."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for imp in imports:
+        so = _parse_sheet_headers_order_pg(imp.get("sheet_headers_order"))
+        if not so:
+            so = list(LARGE_SHEET_CANONICAL_ORDER)
+        for h in so:
+            if not h or h in seen:
+                continue
+            seen.add(h)
+            out.append(h)
+    return out if out else list(LARGE_SHEET_CANONICAL_ORDER)
+
+
+def _is_empty_display_cell(v: Any) -> bool:
+    if v is None:
+        return True
+    s = str(v).strip()
+    return s == "" or s.lower() == "none"
+
+
+def _drop_all_null_large_columns(
+    sec_le: list[str], large_val_rows: list[list[Any]]
+) -> tuple[list[str], list[int]]:
+    """إزالة أعمدة الملف الكبير التي كل قيمها فارغة في صفوف التطابق لهذا القسم."""
+    if not sec_le:
+        return [], []
+    if not large_val_rows:
+        return sec_le, list(range(len(sec_le)))
+    w = len(sec_le)
+    keep: list[int] = []
+    for j in range(w):
+        for lv in large_val_rows:
+            if j < len(lv) and not _is_empty_display_cell(lv[j]):
+                keep.append(j)
+                break
+    if not keep:
+        keep = [0]
+    return [sec_le[j] for j in keep], keep
+
+
 def _row_norm_key_index(row_dict: dict[str, Any]) -> dict[str, str]:
-    """normalized header -> first original key in row_data."""
+    """normalized header -> first original key في صف الملف الكبير."""
     idx: dict[str, str] = {}
     for k in row_dict:
         ks = str(k) if k is not None else ""
@@ -73,13 +221,12 @@ def _row_norm_key_index(row_dict: dict[str, Any]) -> dict[str, str]:
 
 def _map_export_headers_to_sheet(requested: list[str], lh: list[str]) -> list[str]:
     """
-    أعمدة الاختيار في الواجهة تُبنى من اتحاد كل الملفات؛ نربط كل اسم مختار
-    بعمود الشيت الحقيقي (نفس ترتيب الاختيار) حتى تطابق مفاتيح JSONB.
+    أعمدة الاختيار في الواجهة تُبنى من قائمة الأعمدة المعتمدة؛ نربط كل اسم مختار
+    بالاسم الفعلي في التخزين (نفس ترتيب الاختيار) مع تطبيع عربي.
     """
     lh_list = [str(h).strip() for h in lh if h and str(h).strip()]
     req_clean = [str(c).strip() for c in (requested or []) if c and str(c).strip()]
     if not lh_list:
-        # استيراد قديم / column_order فاضي في DB — لا نُسقط أعمدة الملف الكبير
         return req_clean
     if not requested:
         return lh_list
@@ -169,8 +316,43 @@ def _thin_border() -> Border:
 
 
 def _apply_migrations(conn) -> None:
-    """Idempotent: check_large_imports + import_id على check_large_rows."""
+    """إنشاء الجداول أو إسقاط مخطط JSONB القديم وإعادة الإنشاء بأعمدة ثابتة."""
     with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'check_large_rows'
+                AND column_name = 'row_data'
+            )
+            """
+        )
+        legacy_row_json = cur.fetchone()[0]
+        cur.execute(
+            """
+            SELECT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'check_large_imports'
+                AND column_name = 'column_order'
+            )
+            """
+        )
+        legacy_import_json = cur.fetchone()[0]
+        cur.execute(
+            """
+            SELECT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'check_large_rows'
+                AND column_name = 'gps'
+            )
+            """
+        )
+        legacy_gps_col = cur.fetchone()[0]
+
+        if legacy_row_json or legacy_import_json or legacy_gps_col:
+            cur.execute("DROP TABLE IF EXISTS check_large_rows CASCADE")
+            cur.execute("DROP TABLE IF EXISTS check_large_imports CASCADE")
+
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS check_large_imports (
@@ -179,9 +361,15 @@ def _apply_migrations(conn) -> None:
                 filename TEXT NOT NULL DEFAULT '',
                 sheet_name TEXT NOT NULL DEFAULT '',
                 plate_column TEXT NOT NULL DEFAULT '',
-                column_order JSONB NOT NULL DEFAULT '[]'::jsonb,
+                sheet_headers_order TEXT[],
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE check_large_imports
+            ADD COLUMN IF NOT EXISTS sheet_headers_order TEXT[]
             """
         )
         cur.execute(
@@ -201,68 +389,18 @@ def _apply_migrations(conn) -> None:
                     user_id INTEGER NOT NULL,
                     import_id BIGINT NOT NULL REFERENCES check_large_imports(id) ON DELETE CASCADE,
                     plate_normalized TEXT NOT NULL,
-                    row_data JSONB NOT NULL,
-                    gps TEXT NOT NULL DEFAULT ''
+                    "رقم اللوحة" TEXT,
+                    "GPS" TEXT,
+                    "تاريخ التسجيل" TEXT,
+                    "الحي" TEXT,
+                    "الشارع" TEXT,
+                    "ملاحظات" TEXT,
+                    "نوع السيارة" TEXT,
+                    "اسم المسجّل" TEXT,
+                    "موقع الشارع" TEXT
                 )
                 """
             )
-        else:
-            cur.execute(
-                """
-                SELECT EXISTS (
-                  SELECT 1 FROM information_schema.columns
-                  WHERE table_schema = 'public' AND table_name = 'check_large_rows'
-                    AND column_name = 'import_id'
-                )
-                """
-            )
-            has_import_id = cur.fetchone()[0]
-            if not has_import_id:
-                cur.execute(
-                    "ALTER TABLE check_large_rows ADD COLUMN import_id BIGINT REFERENCES check_large_imports(id) ON DELETE CASCADE"
-                )
-                cur.execute(
-                    """
-                    INSERT INTO check_large_imports (user_id, filename, sheet_name, plate_column, column_order, created_at)
-                    SELECT m.user_id, 'legacy-import', COALESCE(m.sheet_name, ''), '', m.column_order, m.updated_at
-                    FROM check_large_meta m
-                    WHERE NOT EXISTS (
-                      SELECT 1 FROM check_large_imports i WHERE i.user_id = m.user_id AND i.filename = 'legacy-import'
-                    )
-                    """
-                )
-                cur.execute(
-                    """
-                    UPDATE check_large_rows r
-                    SET import_id = i.id
-                    FROM check_large_imports i
-                    WHERE r.import_id IS NULL AND i.user_id = r.user_id AND i.filename = 'legacy-import'
-                    """
-                )
-                cur.execute(
-                    """
-                    INSERT INTO check_large_imports (user_id, filename, sheet_name, plate_column, column_order)
-                    SELECT DISTINCT r.user_id, 'migrated', '', '', '[]'::jsonb
-                    FROM check_large_rows r
-                    WHERE r.import_id IS NULL
-                      AND NOT EXISTS (
-                        SELECT 1 FROM check_large_imports i
-                        WHERE i.user_id = r.user_id AND i.filename = 'migrated'
-                      )
-                    """
-                )
-                cur.execute(
-                    """
-                    UPDATE check_large_rows r
-                    SET import_id = i.id
-                    FROM check_large_imports i
-                    WHERE r.import_id IS NULL AND i.user_id = r.user_id AND i.filename = 'migrated'
-                    """
-                )
-                cur.execute("DELETE FROM check_large_rows WHERE import_id IS NULL")
-                cur.execute(
-                    "ALTER TABLE check_large_rows ALTER COLUMN import_id SET NOT NULL"
-                )
         cur.execute("DROP TABLE IF EXISTS check_large_meta CASCADE")
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_clr_import_plate ON check_large_rows (import_id, plate_normalized)"
@@ -276,39 +414,6 @@ def _apply_migrations(conn) -> None:
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_clr_plate_normalized ON check_large_rows (plate_normalized)"
         )
-
-
-def _compact_redundant_gps_in_row_data(conn, batch_size: int = 20000, max_batches: int = 3) -> int:
-    """
-    Save space safely by removing duplicated GPS key from row_data only when
-    dedicated `gps` column is already non-empty.
-    """
-    updated_total = 0
-    with conn.cursor() as cur:
-        for _ in range(max_batches):
-            cur.execute(
-                """
-                WITH picked AS (
-                    SELECT ctid
-                    FROM check_large_rows
-                    WHERE gps <> ''
-                      AND (row_data ? 'GPS' OR row_data ? 'gps')
-                    LIMIT %s
-                )
-                UPDATE check_large_rows r
-                SET row_data = (r.row_data - 'GPS' - 'gps')
-                FROM picked
-                WHERE r.ctid = picked.ctid
-                """,
-                (batch_size,),
-            )
-            n = int(cur.rowcount or 0)
-            if n <= 0:
-                break
-            updated_total += n
-    if updated_total:
-        logger.info("check_postgres compacted redundant GPS row_data rows=%s", updated_total)
-    return updated_total
 
 
 def _ensure_peer_group_mirror_and_rls(conn) -> None:
@@ -370,29 +475,13 @@ def ensure_check_pg_schema(dsn: str) -> None:
     with _schema_lock:
         if dsn in _schema_initialized:
             return
-    stmts = [
-        """
-        CREATE TABLE IF NOT EXISTS check_large_imports (
-            id BIGSERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            filename TEXT NOT NULL DEFAULT '',
-            sheet_name TEXT NOT NULL DEFAULT '',
-            plate_column TEXT NOT NULL DEFAULT '',
-            column_order JSONB NOT NULL DEFAULT '[]'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """,
-    ]
     with psycopg.connect(dsn, autocommit=True) as conn:
-        for sql in stmts:
-            conn.execute(sql)
         _apply_migrations(conn)
         conn.execute("ALTER TABLE check_large_rows ENABLE ROW LEVEL SECURITY")
         conn.execute("ALTER TABLE check_large_rows FORCE ROW LEVEL SECURITY")
         conn.execute("ALTER TABLE check_large_imports ENABLE ROW LEVEL SECURITY")
         conn.execute("ALTER TABLE check_large_imports FORCE ROW LEVEL SECURITY")
         _ensure_peer_group_mirror_and_rls(conn)
-        _compact_redundant_gps_in_row_data(conn)
     with _schema_lock:
         _schema_initialized.add(dsn)
     logger.info("check_postgres schema ensured (multi-import)")
@@ -441,7 +530,7 @@ def list_imports_sync(
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT i.id, i.filename, i.sheet_name, i.plate_column, i.created_at,
+                SELECT i.id, i.filename, i.sheet_name, i.plate_column, i.sheet_headers_order, i.created_at,
                        (SELECT COUNT(*)::int FROM check_large_rows r WHERE r.import_id = i.id) AS row_count
                 FROM check_large_imports i
                 WHERE i.user_id = %s
@@ -457,6 +546,9 @@ def list_imports_sync(
                         "filename": r.get("filename") or "",
                         "sheet_name": r.get("sheet_name") or "",
                         "plate_column": r.get("plate_column") or "",
+                        "sheet_headers_order": _parse_sheet_headers_order_pg(
+                            r.get("sheet_headers_order")
+                        ),
                         "row_count": int(r["row_count"] or 0),
                         "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
                     }
@@ -476,7 +568,7 @@ def delete_import_sync(dsn: str, user_id: int, is_admin: bool, import_id: int) -
 
 
 def get_stored_large_meta_sync(dsn: str, user_id: int, is_admin: bool) -> dict[str, Any] | None:
-    """اتحاد أعمدة كل الاستيرادات + إجمالي الصفوف."""
+    """أعمدة الملف الكبير ثابتة (تفريغ) + إجمالي الصفوف."""
     ensure_check_pg_schema(dsn)
     imports = list_imports_sync(dsn, user_id, is_admin)
     if not imports:
@@ -484,26 +576,7 @@ def get_stored_large_meta_sync(dsn: str, user_id: int, is_admin: bool) -> dict[s
     total_rows = sum(i["row_count"] for i in imports)
     if total_rows == 0:
         return None
-    seen: set[str] = set()
-    union_headers: list[str] = []
-    with check_pg_tx(dsn, user_id, is_admin) as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT column_order FROM check_large_imports
-                WHERE user_id = %s
-                ORDER BY created_at ASC, id ASC
-                """,
-                (user_id,),
-            )
-            for r in cur.fetchall():
-                co = r["column_order"]
-                arr = co if isinstance(co, list) else json.loads(co) if co else []
-                for h in arr:
-                    hs = str(h).strip() if h else ""
-                    if hs and hs not in seen:
-                        seen.add(hs)
-                        union_headers.append(hs)
+    union_headers = _union_sheet_headers_from_imports(imports)
     return {
         "headers": union_headers,
         "sheet_name": "",
@@ -558,26 +631,7 @@ def get_stored_large_meta_for_check_sync(
     total_rows = sum(i["row_count"] for i in imports_all)
     if total_rows == 0:
         return None
-    seen: set[str] = set()
-    union_headers: list[str] = []
-    with check_pg_tx(dsn, user_id, is_admin) as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT column_order FROM check_large_imports
-                WHERE user_id = ANY(%s)
-                ORDER BY user_id ASC, created_at ASC, id ASC
-                """,
-                (peers,),
-            )
-            for r in cur.fetchall():
-                co = r["column_order"]
-                arr = co if isinstance(co, list) else json.loads(co) if co else []
-                for h in arr:
-                    hs = str(h).strip() if h else ""
-                    if hs and hs not in seen:
-                        seen.add(hs)
-                        union_headers.append(hs)
+    union_headers = _union_sheet_headers_from_imports(imports_all)
     return {
         "headers": union_headers,
         "sheet_name": "",
@@ -659,6 +713,7 @@ def import_large_workbook_sync(
     group_max_rows_limit: int | None = None,
     user_max_rows_limit: int | None = None,
 ) -> dict[str, Any]:
+    _ = (large_col or "").strip()
     ensure_check_pg_schema(dsn)
     if len(lc_bytes) > CHECK_PG_MAX_LARGE_BYTES:
         raise ValueError("الملف الكبير يتجاوز 15 ميجابايت")
@@ -674,12 +729,12 @@ def import_large_workbook_sync(
             raise ValueError("الملف الكبير فارغ")
         header_l = lrows[0]
         lh = [str(h).strip() if h is not None else "" for h in header_l]
-        lc = (large_col or "").strip() or (auto_detect_plate_col(lh) or "")
-        if not lc or lc not in lh:
-            raise ValueError(
-                f"لم يُعثر على عمود اللوحة في الملف الكبير. الأعمدة: {lh}"
-            )
-        lci = lh.index(lc)
+        col_idx_by_canonical, hdr_err = _validate_large_import_headers(header_l)
+        if hdr_err or not col_idx_by_canonical:
+            raise ValueError(hdr_err or "ترويسة الملف الكبير غير صالحة")
+        lci = col_idx_by_canonical["رقم اللوحة"]
+        lc = "رقم اللوحة"
+        sheet_headers_order = _sheet_headers_order_sorted(col_idx_by_canonical)
         new_row_count = 0
         for row in lrows[1:]:
             if all(v is None for v in row):
@@ -709,7 +764,7 @@ def import_large_workbook_sync(
                     "تجاوزت الحد المسموح لعدد الصفوف المخزنة. راجع الحد المتاح لك مع الأدمن."
                 )
 
-        batch: list[tuple[int, int, str, Json, str]] = []
+        batch: list[tuple[Any, ...]] = []
         batch_size = 2000
         total = 0
         import_id: int | None = None
@@ -731,8 +786,10 @@ def import_large_workbook_sync(
                     )
                 cur.execute(
                     """
-                    INSERT INTO check_large_imports (user_id, filename, sheet_name, plate_column, column_order)
-                    VALUES (%s, %s, %s, %s, %s::jsonb)
+                    INSERT INTO check_large_imports (
+                        user_id, filename, sheet_name, plate_column, sheet_headers_order
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -740,7 +797,7 @@ def import_large_workbook_sync(
                         fname,
                         large_ws.title,
                         lc,
-                        json.dumps(lh, ensure_ascii=False),
+                        sheet_headers_order,
                     ),
                 )
                 import_id = int(cur.fetchone()[0])
@@ -751,37 +808,14 @@ def import_large_workbook_sync(
                     pn = normalize_plate(rp)
                     if not pn:
                         continue
-                    rd: dict[str, Any] = {}
-                    gps_val = ""
-                    for hi, h in enumerate(lh):
-                        if not h:
-                            continue
-                        cell = row[hi] if hi < len(row) else None
-                        if _norm_header_sim(h) == _norm_header_sim(GPS_HEADER):
-                            if not gps_val:
-                                gps_val = str(cell).strip() if cell is not None else ""
-                            # Keep GPS in dedicated column only to reduce JSONB size.
-                            continue
-                        rd[h] = _jsonable_cell(cell)
-                    batch.append((user_id, import_id, pn, Json(rd), gps_val))
+                    vals9 = _large_row_cell_values(row, col_idx_by_canonical)
+                    batch.append((user_id, import_id, pn) + vals9)
                     total += 1
                     if len(batch) >= batch_size:
-                        cur.executemany(
-                            """
-                            INSERT INTO check_large_rows (user_id, import_id, plate_normalized, row_data, gps)
-                            VALUES (%s, %s, %s, %s::jsonb, %s)
-                            """,
-                            batch,
-                        )
+                        cur.executemany(_INSERT_LARGE_ROW_SQL, batch)
                         batch.clear()
                 if batch:
-                    cur.executemany(
-                        """
-                        INSERT INTO check_large_rows (user_id, import_id, plate_normalized, row_data, gps)
-                        VALUES (%s, %s, %s, %s::jsonb, %s)
-                        """,
-                        batch,
-                    )
+                    cur.executemany(_INSERT_LARGE_ROW_SQL, batch)
         if total == 0 and import_id is not None:
             with check_pg_tx(dsn, user_id, is_admin) as conn:
                 with conn.cursor() as cur:
@@ -792,7 +826,7 @@ def import_large_workbook_sync(
             raise ValueError("لا توجد صفوف بلوحات صالحة في الملف الكبير")
         out: dict[str, Any] = {
             "row_count": total,
-            "headers": lh,
+            "headers": list(sheet_headers_order),
             "sheet_name": large_ws.title,
             "large_col_used": lc,
             "import_id": import_id,
@@ -814,51 +848,12 @@ def _cell_display(v: Any) -> Any:
     return v
 
 
-def _parse_row_data_dict(rd: Any) -> dict[str, Any]:
-    """Normalize JSONB row_data to a str-keyed dict for reliable column lookups."""
-    if rd is None:
-        return {}
-    if isinstance(rd, dict):
-        return {str(k) if k is not None else "": v for k, v in rd.items()}
-    if isinstance(rd, str):
-        try:
-            o = json.loads(rd)
-            return _parse_row_data_dict(o)
-        except Exception:
-            return {}
-    return {}
-
-
-def _merge_sql_gps_into_row(row_dict: dict[str, Any], gps_sql: Any) -> dict[str, Any]:
-    """
-    check_large_rows stores GPS redundantly in row_data and in column `gps`.
-    If row_data lost/emptied GPS (legacy rows, drivers), copy from `gps`.
-    """
-    d = dict(row_dict)
-    g_sql = str(gps_sql or "").strip()
-    if not g_sql:
-        return d
-    idx = _row_norm_key_index(d)
-    gps_n = _norm_header_sim(GPS_HEADER)
-    gps_key = idx.get(gps_n)
-    cur = d.get(GPS_HEADER)
-    if cur is None and gps_key:
-        cur = d.get(gps_key)
-    cur_s = "" if cur is None else str(cur).strip()
-    if not cur_s:
-        if gps_key:
-            d[gps_key] = g_sql
-        else:
-            d[GPS_HEADER] = g_sql
-    return d
-
-
 def _large_row_get(
     row_dict: dict[str, Any],
     col_name: str,
     norm_index: dict[str, str] | None = None,
 ) -> Any:
-    """Lookup cell by export / column_order header; match JSONB keys with Arabic normalization."""
+    """Lookup cell by export header name; Arabic normalization."""
     if not col_name:
         return None
     cn = str(col_name)
@@ -895,15 +890,7 @@ def _fetch_matches_by_plates_batch(
             chunk = distinct_plates[i : i + _CHECK_PLATE_LOOKUP_BATCH]
             if not chunk:
                 continue
-            cur.execute(
-                """
-                SELECT import_id, plate_normalized, row_data, gps
-                FROM check_large_rows
-                WHERE plate_normalized = ANY(%s) AND import_id IS NOT NULL
-                ORDER BY plate_normalized ASC, import_id ASC, id ASC
-                """,
-                (chunk,),
-            )
+            cur.execute(_SELECT_LARGE_ROW_DATA_SQL, (chunk,))
             for row in cur.fetchall():
                 pn = str(row.get("plate_normalized") or "").strip()
                 if not pn:
@@ -912,10 +899,7 @@ def _fetch_matches_by_plates_batch(
                 if iid is None:
                     continue
                 iid_i = int(iid)
-                d = _merge_sql_gps_into_row(
-                    _parse_row_data_dict(row.get("row_data")),
-                    row.get("gps"),
-                )
+                d = _large_dict_from_pg_row(row)
                 bucket = result.setdefault(pn, {})
                 bucket.setdefault(iid_i, []).append(d)
     return result
@@ -929,7 +913,7 @@ def _load_imports_ordered_for_peers(
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT id, filename, sheet_name, plate_column, column_order
+            SELECT id, filename, sheet_name, plate_column, sheet_headers_order
             FROM check_large_imports
             WHERE user_id = ANY(%s)
             ORDER BY user_id ASC, created_at ASC, id ASC
@@ -938,16 +922,16 @@ def _load_imports_ordered_for_peers(
         )
         rows = []
         for r in cur.fetchall():
-            co = r["column_order"]
-            if isinstance(co, str):
-                co = json.loads(co)
+            sho = _parse_sheet_headers_order_pg(r.get("sheet_headers_order"))
+            col_order = sho if sho else list(LARGE_SHEET_CANONICAL_ORDER)
             rows.append(
                 {
                     "id": int(r["id"]),
                     "filename": r.get("filename") or "",
                     "sheet_name": r.get("sheet_name") or "",
                     "plate_column": r.get("plate_column") or "",
-                    "column_order": list(co) if co else [],
+                    "sheet_headers_order": sho,
+                    "column_order": col_order,
                 }
             )
         return rows
@@ -956,6 +940,34 @@ def _load_imports_ordered_for_peers(
 def _ws_set_col_widths(ws, max_col: int, width: float = 18.0) -> None:
     for c in range(1, max_col + 1):
         ws.column_dimensions[get_column_letter(c)].width = width
+
+
+def _apply_match_export_column_widths(
+    ws: openpyxl.worksheet.worksheet.Worksheet,
+    section_header_rows: list[tuple[int, list[Any]]],
+) -> None:
+    """عرض أعمدة أوسع في ملف التطابقات (خصوصاً الملاحظات وGPS)."""
+    for _hdr_row, hdr_vals in section_header_rows:
+        for ci, h in enumerate(hdr_vals, start=1):
+            letter = get_column_letter(ci)
+            hs = str(h or "")
+            title_s = _strip_small_word_from_header_title(hs)
+            if "ملاحظات" in title_s or "ملاحظات" in hs:
+                w = 46.0
+            elif "gps" in hs.lower() or _norm_header_sim("GPS") == _norm_header_sim(
+                title_s
+            ):
+                w = 30.0
+            else:
+                w = 23.0
+            dim = ws.column_dimensions.get(letter)
+            prev_f = 0.0
+            if dim and dim.width:
+                try:
+                    prev_f = float(dim.width)
+                except (TypeError, ValueError):
+                    prev_f = 0.0
+            ws.column_dimensions[letter].width = max(prev_f, w)
 
 
 def _plate_col_matches(col_name: str, plate_column: str) -> bool:
@@ -1090,6 +1102,7 @@ def run_check_plates_postgres_sync(
         unmatched_plates = 0
         section_started: dict[int, bool] = {}
         multi_file_notes: list[tuple[str, str, list[Any], dict[int, list[dict]]]] = []
+        section_header_rows: list[tuple[int, list[Any]]] = []
 
         with check_pg_tx(dsn, user_id, is_admin) as conn:
             imports = _load_imports_ordered_for_peers(conn, peer_ids)
@@ -1111,7 +1124,9 @@ def run_check_plates_postgres_sync(
                 if not norm:
                     continue
                 small_vals = [(srow[i] if i < len(srow) else None) for i in se_idx]
-                plate_disp = str(rp).strip() if rp is not None else norm
+                plate_disp = format_plate_display(norm) or (
+                    str(rp).strip() if rp is not None else norm
+                )
                 pending.append(
                     {
                         "norm": norm,
@@ -1143,8 +1158,8 @@ def run_check_plates_postgres_sync(
                     }
                 )
 
-            # Pass 2: for each large-file import in order, emit all matching rows for that
-            # file only — avoids interleaving sections so rows stay under the correct file.
+            # Pass 2: لكل استيراد — تجميع صفوف التطابق ثم إسقاط أعمدة الملف الكبير الفارغة كلياً،
+            # مع ترتيب أعمدة الملف الكبير كما في الشيت (sheet_headers_order).
             for imp in imports:
                 iid = imp["id"]
                 lh = [
@@ -1163,12 +1178,37 @@ def run_check_plates_postgres_sync(
                     )
                 if not sec_le:
                     sec_le = list(union_headers)
-                pc_l = (imp.get("plate_column") or "").strip()
+
+                rows_buf: list[tuple[list[Any], list[Any]]] = []
                 for ent in small_entries:
                     lst = ent["groups"].get(iid) or []
                     if not lst:
                         continue
-                    small_vals = ent["small_vals"]
+                    sm = ent["small_vals"]
+                    for ld in lst:
+                        nidx = _row_norm_key_index(ld)
+                        large_vals = [
+                            _cell_display(_large_row_get(ld, c, nidx))
+                            for c in sec_le
+                        ]
+                        rows_buf.append((large_vals, sm))
+
+                if not rows_buf:
+                    continue
+
+                large_only = [rv[0] for rv in rows_buf]
+                sec_le_f, _keep_ix = _drop_all_null_large_columns(sec_le, large_only)
+                rows_buf_f = [
+                    ([lv[j] for j in _keep_ix], sm) for lv, sm in rows_buf
+                ]
+
+                pc_l = (imp.get("plate_column") or "").strip()
+                hdr_vals = [
+                    _strip_small_word_from_header_title(c) for c in sec_le_f
+                ] + [_strip_small_word_from_header_title(c) for c in se_cols]
+                hdr_src = ["large"] * len(sec_le_f) + ["small"] * len(se_cols)
+
+                for lv_f, small_vals in rows_buf_f:
                     if not section_started.get(iid):
                         color_hex = FILE_SECTION_HEADER_FILLS[
                             imports.index(imp) % len(FILE_SECTION_HEADER_FILLS)
@@ -1183,12 +1223,7 @@ def run_check_plates_postgres_sync(
                         cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
                         cell.border = border
                         row += 1
-                        hdr_vals = [
-                            _strip_small_word_from_header_title(c) for c in sec_le
-                        ] + [
-                            _strip_small_word_from_header_title(c) for c in se_cols
-                        ]
-                        hdr_src = ["large"] * len(sec_le) + ["small"] * len(se_cols)
+                        hdr_row_start = row
                         hdr_colors = [color_hex] * len(hdr_vals)
                         row = _write_row(
                             ws,
@@ -1206,17 +1241,18 @@ def run_check_plates_postgres_sync(
                             border=border,
                             col_sources=hdr_src,
                         )
+                        section_header_rows.append((hdr_row_start, list(hdr_vals)))
                         section_started[iid] = True
                         title_ui = (imp.get("filename") or "").strip() or "ملف"
                         if sn:
                             title_ui = f"{title_ui} — ورقة: {sn}"
                         plate_idx_sec: list[int] = []
-                        for i, c in enumerate(sec_le):
+                        for i, c in enumerate(sec_le_f):
                             if _plate_col_matches(c, pc_l):
                                 plate_idx_sec.append(i)
                         for i, c in enumerate(se_cols):
                             if _plate_col_matches(c, sc):
-                                plate_idx_sec.append(len(sec_le) + i)
+                                plate_idx_sec.append(len(sec_le_f) + i)
                         preview_sections.append(
                             {
                                 "title": title_ui,
@@ -1227,38 +1263,32 @@ def run_check_plates_postgres_sync(
                             }
                         )
 
-                    for ld in lst:
-                        nidx = _row_norm_key_index(ld)
-                        large_vals = [
-                            _cell_display(_large_row_get(ld, c, nidx))
-                            for c in sec_le
+                    row_vals = list(lv_f) + list(small_vals)
+                    row_src = ["large"] * len(sec_le_f) + ["small"] * len(se_cols)
+                    row = _write_row(
+                        ws,
+                        row,
+                        row_vals,
+                        header=False,
+                        header_fills=None,
+                        body_fill_large=body_fill_large,
+                        body_fill_small=body_fill_small,
+                        body_fill_plate=body_fill_plate,
+                        fonts_h=header_font,
+                        fonts_b=body_font,
+                        align_h=align_header,
+                        align_b=align_cell,
+                        border=border,
+                        col_sources=row_src,
+                    )
+                    matched_rows_count += 1
+                    if len(preview_rows) < PREVIEW_MAX_ROWS:
+                        pr = [
+                            "" if v is None else str(v).strip() for v in row_vals
                         ]
-                        row_vals = large_vals + small_vals
-                        row_src = ["large"] * len(sec_le) + ["small"] * len(se_cols)
-                        row = _write_row(
-                            ws,
-                            row,
-                            row_vals,
-                            header=False,
-                            header_fills=None,
-                            body_fill_large=body_fill_large,
-                            body_fill_small=body_fill_small,
-                            body_fill_plate=body_fill_plate,
-                            fonts_h=header_font,
-                            fonts_b=body_font,
-                            align_h=align_header,
-                            align_b=align_cell,
-                            border=border,
-                            col_sources=row_src,
-                        )
-                        matched_rows_count += 1
-                        if len(preview_rows) < PREVIEW_MAX_ROWS:
-                            pr = [
-                                "" if v is None else str(v).strip() for v in row_vals
-                            ]
-                            preview_rows.append(pr)
-                            if preview_sections:
-                                preview_sections[-1]["rows"].append(pr)
+                        preview_rows.append(pr)
+                        if preview_sections:
+                            preview_sections[-1]["rows"].append(pr)
 
             if multi_file_notes:
                 row += 1
@@ -1313,7 +1343,12 @@ def run_check_plates_postgres_sync(
         max_col = 1
         if ws.max_column:
             max_col = ws.max_column
-        _ws_set_col_widths(ws, max_col, 20.0)
+        _apply_match_export_column_widths(ws, section_header_rows)
+        for c in range(1, max_col + 1):
+            letter = get_column_letter(c)
+            dim = ws.column_dimensions.get(letter)
+            if not dim or not dim.width:
+                ws.column_dimensions[letter].width = 18.0
 
         if not matched_rows_count:
             return {
@@ -1388,14 +1423,10 @@ def collect_gps_vehicles_stored_sync(
     if not meta or not meta.get("headers"):
         return {"detail": "لا توجد بيانات ملف كبير مخزّنة", "vehicles": []}
 
-    union_h: list[str] = list(meta["headers"])
-    gps_col = GPS_HEADER if GPS_HEADER in union_h else None
-    if not gps_col:
-        return {"detail": "لا يوجد عمود GPS في البيانات المخزّنة", "vehicles": []}
-
-    date_col = next((h for h in union_h if "تاريخ" in h), None)
-    type_col = next((h for h in union_h if "نوع" in h), None)
-    notes_col = next((h for h in union_h if "ملاحظات" in h), None)
+    gps_col = "GPS"
+    date_col = "تاريخ التسجيل"
+    type_col = "نوع السيارة"
+    notes_col = "ملاحظات"
 
     small_wb = openpyxl.load_workbook(io.BytesIO(sc_bytes), read_only=True, data_only=True)
     try:
@@ -1443,7 +1474,7 @@ def collect_gps_vehicles_stored_sync(
                         gps = str(
                             _large_row_get(ld, gps_col or "", nix) or ""
                         ).strip()
-                        plate = str(rp or "").strip()
+                        plate = format_plate_display(norm) or str(rp or "").strip()
                         key = (plate, gps, fn)
                         if key in seen:
                             continue
@@ -1561,7 +1592,7 @@ def admin_get_import_meta_sync(
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT id, user_id, filename, sheet_name, plate_column, column_order
+                SELECT id, user_id, filename, sheet_name, plate_column, sheet_headers_order
                 FROM check_large_imports
                 WHERE id = %s
                 """,
@@ -1570,10 +1601,8 @@ def admin_get_import_meta_sync(
             r = cur.fetchone()
             if not r:
                 return None
-            co = r["column_order"]
-            if isinstance(co, str):
-                co = json.loads(co)
-            cols = list(co) if co else []
+            sho = _parse_sheet_headers_order_pg(r.get("sheet_headers_order"))
+            cols = sho if sho else list(LARGE_SHEET_CANONICAL_ORDER)
             return {
                 "import_id": int(r["id"]),
                 "user_id": int(r["user_id"]),
@@ -1605,8 +1634,8 @@ def admin_list_import_rows_page_sync(
             )
             total = int(cur.fetchone()["cnt"] or 0)
             cur.execute(
-                """
-                SELECT id, plate_normalized, row_data, gps
+                f"""
+                SELECT {_ADMIN_LARGE_ROW_SELECT_PREFIX}
                 FROM check_large_rows
                 WHERE import_id = %s
                 ORDER BY id ASC
@@ -1616,16 +1645,13 @@ def admin_list_import_rows_page_sync(
             )
             rows: list[dict[str, Any]] = []
             for row in cur.fetchall():
-                rd = _merge_sql_gps_into_row(
-                    _parse_row_data_dict(row.get("row_data")),
-                    row.get("gps"),
-                )
+                rd = _large_dict_from_pg_row(row)
                 rows.append(
                     {
                         "id": int(row["id"]),
                         "plate_normalized": row.get("plate_normalized") or "",
-                        "gps": row.get("gps") or "",
-                        "row_data": rd if isinstance(rd, dict) else {},
+                        "gps": str(rd.get("GPS") or ""),
+                        "row_data": rd,
                     }
                 )
             return rows, total
@@ -1640,7 +1666,7 @@ def admin_write_import_csv_tempfile_sync(
     meta = admin_get_import_meta_sync(dsn, admin_user_id, is_admin, import_id)
     if not meta:
         raise ValueError("import not found")
-    headers = ["id", "plate_normalized", "gps"] + list(meta.get("column_order") or [])
+    headers = ["id", "plate_normalized", "gps"] + list(LARGE_SHEET_CANONICAL_ORDER)
     base = _safe_filename(meta.get("filename") or f"import_{import_id}")
     if base.lower().endswith(".xlsx"):
         base = base[:-5]
@@ -1656,8 +1682,8 @@ def admin_write_import_csv_tempfile_sync(
             with check_pg_tx(dsn, admin_user_id, True) as conn:
                 with conn.cursor(row_factory=dict_row) as cur:
                     cur.execute(
-                        """
-                        SELECT id, plate_normalized, row_data, gps
+                        f"""
+                        SELECT {_ADMIN_LARGE_ROW_SELECT_PREFIX}
                         FROM check_large_rows
                         WHERE import_id = %s
                         ORDER BY id ASC
@@ -1669,16 +1695,13 @@ def admin_write_import_csv_tempfile_sync(
                         if not chunk:
                             break
                         for row in chunk:
-                            rd = _merge_sql_gps_into_row(
-                                _parse_row_data_dict(row.get("row_data")),
-                                row.get("gps"),
-                            )
+                            rd = _large_dict_from_pg_row(row)
                             vals: list[Any] = [
                                 int(row["id"]),
                                 row.get("plate_normalized") or "",
-                                row.get("gps") or "",
+                                str(rd.get("GPS") or ""),
                             ]
-                            for h in meta.get("column_order") or []:
+                            for h in LARGE_SHEET_CANONICAL_ORDER:
                                 vals.append(_cell_display(rd.get(h)))
                             w.writerow(vals)
         return path, out_name

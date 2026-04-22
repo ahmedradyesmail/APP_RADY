@@ -301,8 +301,10 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .om-xls-titlebar{background:linear-gradient(180deg,#ebebeb 0%,#d9d9d9 55%,#d0d0d0 100%);color:#1f1f1f;font-family:Segoe UI,Calibri,Tahoma,sans-serif;font-size:.76rem;font-weight:700;padding:.58rem 1rem;line-height:1.45;text-align:right;border-bottom:1px solid #a8a8a8;letter-spacing:.01em}
 .om-xls-scroll{max-height:min(56vh,440px);overflow:auto;background:#fcfcfc;direction:rtl;border-top:1px solid #c5c5c5}
 .om-xls-grid{width:100%;border-collapse:collapse;table-layout:auto;font-family:Segoe UI,Calibri,var(--mono);font-size:.75rem;background:#fff}
-.om-xls-grid thead th{position:sticky;top:0;z-index:2;background:#f0f0f0;border:1px solid #c6c6c6;padding:.45rem .55rem;text-align:center;font-weight:700;color:#222;white-space:nowrap;box-shadow:inset 0 -1px 0 #b8b8b8}
-.om-xls-grid tbody td{border:1px solid #c6c6c6;padding:.42rem .55rem;text-align:center;vertical-align:middle;color:#1a1a1a;background:#fff;font-family:Segoe UI,Calibri,var(--ar)}
+.om-xls-grid thead th{position:sticky;top:0;z-index:2;background:#f0f0f0;border:1px solid #c6c6c6;padding:.45rem .55rem;text-align:center;font-weight:700;color:#222;white-space:nowrap;box-shadow:inset 0 -1px 0 #b8b8b8;min-width:6rem}
+.om-xls-grid tbody td{border:1px solid #c6c6c6;padding:.42rem .55rem;text-align:center;vertical-align:middle;color:#1a1a1a;background:#fff;font-family:Segoe UI,Calibri,var(--ar);min-width:5.5rem}
+.om-xls-grid th.om-xls-col-notes,.om-xls-grid td.om-xls-col-notes{min-width:17rem;max-width:42rem;white-space:normal;word-break:break-word;text-align:right;vertical-align:middle}
+#omMatchTableWrap th.om-xls-col-notes,#omMatchTableWrap td.om-xls-col-notes{min-width:17rem;max-width:42rem;white-space:normal;word-break:break-word;text-align:right}
 .om-xls-grid tbody tr:nth-child(even) td{background:#f7f7f7}
 .om-xls-grid td.om-xls-small,.om-xls-grid th.om-xls-small{background:#edf7ed!important;border-color:#9ccc9c!important;color:#14532d!important;font-weight:700}
 .om-xls-grid th.om-xls-plate,.om-xls-grid td.om-xls-plate{font-weight:800!important;color:#0f172a}
@@ -568,7 +570,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <div class="om-xls-titlebar" id="tafrighSheetTitlebar">بيانات المركبات</div>
     <div class="om-xls-scroll tafrigh-xls-scroll">
       <table class="om-xls-grid" id="tafrighDataTable">
-        <thead><tr><th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الحي</th><th>الشارع</th><th>تفاصيل الموقع</th><th>نوع المركبة</th><th>اسم المسجّل</th><th>موقع الشارع</th><th></th></tr></thead>
+        <thead><tr><th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الحي</th><th>الشارع</th><th>ملاحظات</th><th>نوع السيارة</th><th>اسم المسجّل</th><th>موقع الشارع</th><th></th></tr></thead>
         <tbody id="excelBody"></tbody>
       </table>
     </div>
@@ -618,6 +620,11 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       </div>
       <div style="margin-top:.65rem">
         <label class="lbl">أعمدة الملف الكبير في التطابق</label>
+        <details class="check-export-drop" id="omCheckLargeExportDrop" style="margin-top:.45rem">
+          <summary>اختر الأعمدة الظاهرة في ورقة التطابق…</summary>
+          <p class="check-export-hint" style="margin-top:.45rem">يُحفظ اختيارك على هذا الجهاز حتى تغيّره يدوياً.</p>
+          <div id="omLargeExportList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.25rem .8rem"></div>
+        </details>
       </div>
     </div>
     <div class="file-card violet-card">
@@ -837,7 +844,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
         <div class="om-xls-scroll tafrigh-xls-scroll">
           <table class="om-xls-grid" id="checkSessionDataTable">
             <thead><tr>
-              <th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الحي</th><th>الشارع</th><th>تفاصيل الموقع</th><th>نوع المركبة</th><th>اسم المسجّل</th><th>موقع الشارع</th><th></th>
+              <th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الحي</th><th>الشارع</th><th>ملاحظات</th><th>نوع السيارة</th><th>اسم المسجّل</th><th>موقع الشارع</th><th></th>
             </tr></thead>
             <tbody id="checkSessionExcelBody"></tbody>
           </table>
@@ -890,9 +897,9 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       </select>
     </div>
     <div style="margin-top:.75rem">
-      <label class="lbl">الأعمدة التي ستظهر فوق الدبوس (اختيار متعدد)</label>
+      <label class="lbl">الأعمدة في نافذة الدبوس (اختيار متعدد)</label>
       <details id="gmLabelColsDrop" style="background:var(--s2);border:1px solid var(--brd2);border-radius:7px;padding:.55rem .75rem">
-        <summary style="cursor:pointer;font-family:var(--mono);font-size:.78rem;color:var(--dim2)">اختر الأعمدة…</summary>
+        <summary style="cursor:pointer;font-family:var(--mono);font-size:.78rem;color:var(--dim2)">اختر الأعمدة… (يُفعّل تلقائياً: رقم اللوحة، نوع السيارة، تاريخ التسجيل، ملاحظات)</summary>
         <div id="gmLabelColsList" style="margin-top:.55rem;display:grid;grid-template-columns:1fr 1fr;gap:.35rem .8rem"></div>
       </details>
       <div style="font-size:.68rem;color:var(--dim2);margin-top:.45rem;font-family:var(--mono)">
@@ -1325,6 +1332,47 @@ function removeGmapsFile(){
   clearGmMarkers();
   showGmStatus('','');
 }
+/** ترتيب عرض الحقول على الدبوس: رقم اللوحة → نوع السيارة → تاريخ التسجيل → ملاحظات (+أي أعمدة إضافية مختارة). */
+var GM_MAP_PIN_LABEL_CANON=['رقم اللوحة','نوع السيارة','تاريخ التسجيل','ملاحظات'];
+function gmNormHeaderForGmaps(s){
+  return String(s||'').normalize('NFKC')
+    .replace(/[\u0640\u061c\u200c-\u200f\ufeff]/g,'')
+    .replace(/[\u0623\u0625\u0622]/g,'\u0627')
+    .replace(/\u0629/g,'\u0647')
+    .replace(/\u0649/g,'\u064a')
+    .replace(/\s+/g,'')
+    .toLowerCase();
+}
+function gmAutoPickGmapLabelCols(headers){
+  const hdrs=(headers||[]).filter(Boolean);
+  const normToFirst=new Map();
+  hdrs.forEach(function(h){
+    const n=gmNormHeaderForGmaps(h);
+    if(!normToFirst.has(n)) normToFirst.set(n,h);
+  });
+  const out=[];
+  GM_MAP_PIN_LABEL_CANON.forEach(function(canon){
+    const n=gmNormHeaderForGmaps(canon);
+    const orig=normToFirst.get(n);
+    if(orig&&out.indexOf(orig)===-1) out.push(orig);
+  });
+  return out;
+}
+function gmSortPinLabelCols(cols){
+  if(!cols||!cols.length) return [];
+  const want=GM_MAP_PIN_LABEL_CANON.map(gmNormHeaderForGmaps);
+  const used=new Set();
+  const out=[];
+  want.forEach(function(n){
+    for(let i=0;i<cols.length;i++){
+      const c=cols[i];
+      if(used.has(c)) continue;
+      if(gmNormHeaderForGmaps(c)===n){ out.push(c); used.add(c); break; }
+    }
+  });
+  cols.forEach(function(c){ if(!used.has(c)){ out.push(c); used.add(c); } });
+  return out;
+}
 async function loadGmapsHeaders(){
   if(!gmapsFile)return;
   try{
@@ -1369,6 +1417,13 @@ async function loadGmapsHeaders(){
         wrap.appendChild(cb);
         wrap.appendChild(sp);
         list.appendChild(wrap);
+      });
+      const autoPick=gmAutoPickGmapLabelCols(headers);
+      autoPick.forEach(function(headerName){
+        const inputs=list.querySelectorAll('input[type=checkbox]');
+        for(let i=0;i<inputs.length;i++){
+          if(inputs[i].value===headerName){ inputs[i].checked=true; break; }
+        }
       });
     }
     gmHeadersLoaded=true;
@@ -1450,7 +1505,7 @@ async function loadGpsPointsToMap(){
   const btn=document.getElementById('gmLoadBtn');
   const gpsColEl=document.getElementById('gmGpsCol');
   const gpsCol=(gpsColEl?gpsColEl.value:'GPS').trim() || 'GPS';
-  const selectedCols=getSelectedGmLabelCols();
+  const selectedCols=gmSortPinLabelCols(getSelectedGmLabelCols());
   btn.disabled=true;
   showGmStatus('proc','جاري قراءة الملف وتحميل الخريطة …',true);
   try{
@@ -2428,7 +2483,10 @@ function checkLiveMaybeAppendSessionRow(data){
   const plate=String(data.plate||'').trim();
   if(!plate) return;
   const now=new Date();
-  const recording=now.toLocaleString('ar-EG',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const recording=now.toLocaleString('en-GB',{
+    year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',hour12:false
+  });
   var dn=document.getElementById('checkSessionDefaultDistrict');
   var sn=document.getElementById('checkSessionDefaultStreet');
   var rn=document.getElementById('checkSessionDefaultRecorder');

@@ -6,26 +6,7 @@ import re
 from typing import Any
 
 from services.excel_utils import load_workbook_maybe_encrypted
-from services.plate_utils import normalize_plate
-
-
-def format_plate_display(s: str) -> str:
-    """Best-effort display: connected Arabic letters + space + Western digits."""
-    raw = str(s or "").strip()
-    if not raw:
-        return ""
-    compact = re.sub(r"[\s\u200b\u200c\u200d\ufeff_-]+", "", raw)
-    letters = "".join(ch for ch in compact if ("ا" <= ch <= "ي") or ("ء" <= ch <= "غ") or ch.isalpha())
-    digits_west = "".join(ch for ch in compact if ch.isdigit())
-    if not digits_west:
-        for ch in compact:
-            if "\u0660" <= ch <= "\u0669":
-                digits_west += str(ord(ch) - 0x0660)
-            elif "\u06F0" <= ch <= "\u06F9":
-                digits_west += str(ord(ch) - 0x06F0)
-    if letters and digits_west:
-        return f"{letters} {digits_west}"
-    return raw
+from services.plate_utils import format_plate_display, normalize_plate
 
 
 def plate_candidates_from_text(text: str) -> list[str]:
