@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
@@ -18,7 +19,7 @@ from services.job_store import (
     schedule_job_cleanup,
 )
 from services.provider_keys import async_gemini_try_all, has_any_gemini_keys
-from services.upload_security import MAX_AUDIO_BYTES, read_upload_with_limit
+from services.upload_security import MAX_AUDIO_BYTES, save_upload_to_temp_with_limit
 
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ router = APIRouter(
 
 async def _audio_job_task(
     job_id: str,
-    file_content: bytes,
+    file_path: str,
     filename: str,
     model_name: str,
     recorder_name: str,
@@ -60,7 +61,7 @@ async def _audio_job_task(
 
             async def _attempt(api_key: str):
                 return await process_audio(
-                    file_content=file_content,
+                    file_path=file_path,
                     filename=filename,
                     api_key=api_key,
                     model_name=model_name,
@@ -111,9 +112,9 @@ async def _audio_job_task(
             logger.exception("Audio processing failed")
             detail = "An internal error occurred. Please try again."
             if str(e) == "no_gemini_key":
-                detail = "خدمة التفريغ غير متاحة مؤقتاً."
+                detail = "خدمة التسجيل غير متاحة مؤقتاً."
             elif str(e) == "gemini_failed":
-                detail = "تعذّر التفريغ. تحقق من مفتاح Gemini في لوحة الأدمن أو أعد المحاولة لاحقاً."
+                detail = "تعذّر التسجيل. تحقق من مفتاح Gemini في لوحة الأدمن أو أعد المحاولة لاحقاً."
             elif str(e).startswith("model_not_supported::"):
                 detail = str(e).split("::", 1)[1] or "موديل REST غير مدعوم."
             await job_save(
@@ -125,6 +126,12 @@ async def _audio_job_task(
                 },
                 ttl_seconds=TTL_TERMINAL_SEC,
             )
+        finally:
+            if file_path:
+                try:
+                    await asyncio.to_thread(os.unlink, file_path)
+                except OSError:
+                    pass
         schedule_job_cleanup(job_id)
 
 
@@ -139,7 +146,7 @@ async def process(
 ):
     model_name = model_name.strip()
     if not model_name:
-        raise HTTPException(status_code=400, detail="اختر موديل التفريغ (REST).")
+        raise HTTPException(status_code=400, detail="اختر موديل التسجيل (REST).")
 
     if not await asyncio.to_thread(is_gemini_model_allowed_sync, "rest", model_name):
         raise HTTPException(
@@ -149,7 +156,7 @@ async def process(
     if not has_any_gemini_keys():
         raise HTTPException(
             status_code=503,
-            detail="خدمة التفريغ غير متاحة — أضف مفتاح Gemini في Redis من لوحة الأدمن (REDIS_URL).",
+            detail="خدمة التسجيل غير متاحة — أضف مفتاح Gemini في Redis من لوحة الأدمن (REDIS_URL).",
         )
 
     try:
@@ -157,26 +164,39 @@ async def process(
     except Exception:
         gps_points = []
 
-    # SECURITY FIX: file size limit to prevent DoS via large uploads
-    file_content = await read_upload_with_limit(audio, MAX_AUDIO_BYTES, 10)
-
-    job_id = new_job_id()
-    await job_save(
-        job_id,
-        {"status": "processing", "data": None},
-        ttl_seconds=TTL_PROCESSING_SEC,
+    file_name = (audio.filename or "recording.webm").strip() or "recording.webm"
+    suffix = "." + file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ".webm"
+    file_path = await save_upload_to_temp_with_limit(
+        audio,
+        max_bytes=MAX_AUDIO_BYTES,
+        max_mb=10,
+        prefix="audio_upload_",
+        suffix=suffix,
     )
-    background_tasks.add_task(
-        _audio_job_task,
-        job_id,
-        file_content,
-        audio.filename or "audio.mp3",
-        model_name,
-        recorder_name.strip(),
-        sheet_name.strip(),
-        gps_points,
-    )
-    return JSONResponse({"job_id": job_id, "status": "processing"})
+    try:
+        job_id = new_job_id()
+        await job_save(
+            job_id,
+            {"status": "processing", "data": None},
+            ttl_seconds=TTL_PROCESSING_SEC,
+        )
+        background_tasks.add_task(
+            _audio_job_task,
+            job_id,
+            file_path,
+            file_name,
+            model_name,
+            recorder_name.strip(),
+            sheet_name.strip(),
+            gps_points,
+        )
+        return JSONResponse({"job_id": job_id, "status": "processing"})
+    except Exception:
+        try:
+            await asyncio.to_thread(os.unlink, file_path)
+        except OSError:
+            pass
+        raise
 
 
 @router.get("/transcribe/status/{job_id}")

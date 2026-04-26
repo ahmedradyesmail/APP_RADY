@@ -26,22 +26,16 @@ SYSTEM_INSTRUCTION = (
     "Return JSON ONLY (per SYSTEM_PROMPT). No markdown, no prose; only keys allowed there (plate/plates/moving). "
     "The user usually spells letters one-by-one, then digits, e.g. 'و ص ر 3424'. "
     "If you hear Arabic letter names (واو/صاد/راء/حاء/هاء/عين/غين/قاف/كاف/...), map each to exactly ONE Arabic plate letter. "
-    "Never output Latin letters in JSON (no 'h' etc.). If audio sounds like an English letter name, treat it as an Arabic letter-name cue, not Latin text. "
     "Do NOT expand a spoken letter into a full Arabic word in the output (e.g. never output 'الف' instead of 'ا'). "
     "If audio is ambiguous/low confidence, return {\"plate\":null} instead of guessing. "
     "If the speaker says the plate is «متحرك» (moving / not parked), set \"moving\": true for that plate; otherwise false. "
-    "Each user/model turn is independent: do not carry over or repeat a plate from an earlier turn unless clearly re-spoken in the current turn. "
-    "Plate constraints are strict: letters must never exceed 3 Arabic letters, digits must never exceed 4 numbers. "
-    "Preferred format is 3 letters + 4 digits when clearly heard. "
+    "If the speaker says 'تعديل' (correction), discard the plate mentioned BEFORE this word and only extract the plate mentioned AFTER it in the same turn."
+    "Plate constraints are strict and mandatory: letters must be exactly 3 Arabic letters, and digits must be exactly 4 Western numbers (0-9). "
+    "Preserve leading zeros exactly as spoken (e.g. 0129 must stay 0129). "
     "Never output letter-name words for plate letters (e.g. do not output 'عين' or 'عن'; output single letter 'ع'). "
-    "\n"
-    "تثبيت أخطاء شائعة في النطق (لو سمعت الاسم، اختر الحرف الصحيح للوحة): "
-    "حاء/حا/حه => ح (وليس ه). "
-    "هاء/ها/هه => ه (وليس ح). "
-    "عين/عاين => ع (وليس غ ولا ق). "
-    "غين/غاين => غ (وليس ع). "
-    "قاف => ق (وليس ك). "
-    "كاف => ك (وليس ق)."
+    "STRICT LANGUAGE LOCK: Only Arabic characters allowed. NEVER output English or Latin letters."
+    "FORCE START RULE: If the audio starts with a breathy sound (Haa/Heh), ALWAYS map it to 'ح'. NEVER start a plate with 'هـ'."
+    "MID-SPEECH RULE: Only output 'هـ' if it occurs clearly between other letters, never at the very beginning of the audio."
 )
 
 SYSTEM_PROMPT = """Output must be ONLY one of:
@@ -57,10 +51,11 @@ Rules:
 5) Digits must be Western 0-9 only.
 6) No markdown, no prose, no keys other than plate/plates/moving.
 7) The letters block must contain Arabic letters ONLY (Unicode Arabic letters). Never output Latin letters.
-8) Letters count must be 1..3 (preferred 3). Never output >3 letters.
-9) Digits count must be 1..4 (preferred 4). Never output >4 digits.
-10) If you hear a letter name, convert it to one Arabic character only (e.g. عين/عن -> ع).
+8) Letters count must be exactly 3 Arabic letters (no less, no more).
+9) Digits count must be exactly 4 Western digits 0-9 (no less, no more).
+10) If you hear a letter name, convert it to one Arabic character only (e.g. عين/عن -> ع, لام -> ل, صاد -> ص, ألف -> ا, دال -> د).
 11) Boolean "moving" is required on every object that has "plate" (false if parked / not said).
+12) Preserve leading zeros in digits exactly as spoken (e.g., '0123' must NOT become '123').
 
 Valid example: {"plate":"وصر 4923","moving":false}"""
 

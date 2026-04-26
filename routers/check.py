@@ -47,8 +47,8 @@ from services.check_queue import (
 )
 from services.excel_utils import (
     find_best_sheet_async,
-    load_workbook_from_bytes_async,
-    load_workbook_maybe_encrypted_async,
+    load_workbook_from_path_async,
+    load_workbook_maybe_encrypted_from_path_async,
 )
 from services.job_store import (
     TTL_PROCESSING_SEC,
@@ -58,7 +58,11 @@ from services.job_store import (
     new_job_id,
     schedule_job_cleanup,
 )
-from services.plate_utils import auto_detect_plate_col, auto_detect_plate_col_from_row3
+from services.plate_utils import (
+    auto_detect_plate_col,
+    auto_detect_plate_col_from_row3,
+    auto_detect_plate_col_from_rows,
+)
 from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
 
 
@@ -137,6 +141,15 @@ def _get_row_values(ws, row_no: int) -> tuple | None:
     return None
 
 
+def _get_data_rows(ws, *, min_row: int = 2, max_rows: int = 5) -> list[tuple]:
+    out: list[tuple] = []
+    for row in ws.iter_rows(min_row=min_row, values_only=True):
+        if len(out) >= max_rows:
+            break
+        out.append(row)
+    return out
+
+
 def _collect_column_samples(
     ws,
     headers: list[str],
@@ -173,10 +186,15 @@ async def check_headers(
     result = {}
 
     if large_file:
+        large_tmp = None
         try:
-            # SECURITY FIX: file size limit to prevent DoS via large uploads
-            content = await read_upload_with_limit(large_file, MAX_EXCEL_BYTES, 30)
-            wb = await load_workbook_maybe_encrypted_async(content, password.strip())
+            large_tmp = await _save_upload_to_temp_with_limit(
+                large_file,
+                max_bytes=MAX_EXCEL_BYTES,
+                max_mb=30,
+                prefix="check_headers_large_",
+            )
+            wb = await load_workbook_maybe_encrypted_from_path_async(large_tmp, password.strip())
             ws = await find_best_sheet_async(wb)
             headers = _get_headers(ws)
             result["large"] = {
@@ -185,28 +203,58 @@ async def check_headers(
                 "sheet_name": ws.title,
                 "all_sheets": wb.sheetnames,
             }
+            try:
+                wb.close()
+            except Exception:
+                pass
         except Exception as e:
             result["large"] = {"error": str(e)}
+        finally:
+            if large_tmp:
+                try:
+                    os.unlink(large_tmp)
+                except OSError:
+                    pass
 
     if small_file:
+        small_tmp = None
         try:
-            # SECURITY FIX: file size limit to prevent DoS via large uploads
-            content = await read_upload_with_limit(small_file, MAX_EXCEL_BYTES, 30)
-            wb = await load_workbook_from_bytes_async(content)
+            small_tmp = await _save_upload_to_temp_with_limit(
+                small_file,
+                max_bytes=MAX_EXCEL_BYTES,
+                max_mb=30,
+                prefix="check_headers_small_",
+            )
+            wb = await load_workbook_from_path_async(small_tmp)
             ws = await find_best_sheet_async(wb)
             headers = _get_headers(ws)
             row3 = _get_row_values(ws, 3)
+            first_rows = _get_data_rows(ws, min_row=2, max_rows=5)
             col_samples = _collect_column_samples(ws, headers)
+            detected = (
+                auto_detect_plate_col(headers)
+                or auto_detect_plate_col_from_row3(headers, row3)
+                or auto_detect_plate_col_from_rows(headers, first_rows, min_hits=2)
+            )
             result["small"] = {
                 "headers": headers,
-                "detected": auto_detect_plate_col(headers)
-                or auto_detect_plate_col_from_row3(headers, row3),
+                "detected": detected,
                 "sheet_name": ws.title,
                 "all_sheets": wb.sheetnames,
                 "column_samples": col_samples,
             }
+            try:
+                wb.close()
+            except Exception:
+                pass
         except Exception as e:
             result["small"] = {"error": str(e)}
+        finally:
+            if small_tmp:
+                try:
+                    os.unlink(small_tmp)
+                except OSError:
+                    pass
 
     return JSONResponse(result)
 
@@ -476,8 +524,15 @@ async def check_import_large(
             detail="CHECK_POSTGRES_URL is not configured.",
         )
     await _rate_limit_user_check(current_user.id)
+    large_tmp = None
     try:
-        content = await read_upload_with_limit(large_file, CHECK_PG_MAX_LARGE_BYTES, 15)
+        large_tmp = await _save_upload_to_temp_with_limit(
+            large_file,
+            max_bytes=CHECK_PG_MAX_LARGE_BYTES,
+            max_mb=15,
+            prefix="check_import_large_",
+        )
+        content = await asyncio.to_thread(Path(large_tmp).read_bytes)
     except HTTPException:
         raise
     except Exception as e:
@@ -506,6 +561,12 @@ async def check_import_large(
             status_code=500,
             detail="An internal error occurred while importing the large file.",
         )
+    finally:
+        if large_tmp:
+            try:
+                os.unlink(large_tmp)
+            except OSError:
+                pass
     return JSONResponse({"ok": True, **summary})
 
 
@@ -523,8 +584,14 @@ async def check_gps_stored(
             status_code=503,
             detail="CHECK_POSTGRES_URL is not configured.",
         )
-    sc_bytes = await read_upload_with_limit(small_file, MAX_EXCEL_BYTES, 30)
+    small_tmp = await _save_upload_to_temp_with_limit(
+        small_file,
+        max_bytes=MAX_EXCEL_BYTES,
+        max_mb=30,
+        prefix="check_gps_stored_",
+    )
     try:
+        sc_bytes = await asyncio.to_thread(Path(small_tmp).read_bytes)
         data = await asyncio.to_thread(
             collect_gps_vehicles_stored_sync,
             dsn,
@@ -540,6 +607,11 @@ async def check_gps_stored(
             status_code=500,
             detail="An internal error occurred.",
         )
+    finally:
+        try:
+            os.unlink(small_tmp)
+        except OSError:
+            pass
     return JSONResponse(data)
 
 

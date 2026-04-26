@@ -7,10 +7,21 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    """Optional body: refresh_token; if omitted, cookie tfg_refresh is used."""
+
+    refresh_token: str | None = None
+
+
+class AuthSessionOut(BaseModel):
+    """JWTs are set as HttpOnly cookies; JSON is for UI flags only."""
+
+    is_admin: bool = False
+    token_type: str = "bearer"
 
 
 class TokenResponse(BaseModel):
+    """Legacy JSON token response (non-browser clients). Prefer cookies in browsers."""
+
     access_token: str
     refresh_token: str
     token_type: str = "bearer"

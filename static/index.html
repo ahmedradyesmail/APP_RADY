@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>التفريغ — License Plate Extractor</title>
+<title>التسجيل — License Plate Extractor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Kufi+Arabic:wght@400;600;800&display=swap" rel="stylesheet"/>
 <style>
@@ -296,6 +296,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 #omMatchTableWrap th.om-match-col-small,#omMatchTableWrap td.om-match-col-small{background:rgba(34,197,94,.1);box-shadow:inset 3px 0 0 #16a34a}
 #omMatchTableWrap th.om-match-col-small{color:#166534;font-weight:800}
 #omMatchTableWrap th.om-match-col-plate,#omMatchTableWrap td.om-match-col-plate{font-weight:800!important;color:#0f172a}
+#omMatchTableWrap td.om-plate-dup{background:rgba(250,204,21,.42)!important;box-shadow:inset 0 0 0 1px rgba(217,119,6,.4)}
+body.light #omMatchTableWrap td.om-plate-dup{background:rgba(253,224,71,.55)!important;box-shadow:inset 0 0 0 1px rgba(202,138,4,.35)}
 #omMatchPreviewHost.om-match-preview-host{display:flex;flex-direction:column;gap:1.05rem;margin-bottom:1rem;direction:rtl}
 .om-xls-sheet{border:1px solid #b0b0b0;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.07),0 0 0 1px rgba(255,255,255,.8) inset}
 .om-xls-titlebar{background:linear-gradient(180deg,#ebebeb 0%,#d9d9d9 55%,#d0d0d0 100%);color:#1f1f1f;font-family:Segoe UI,Calibri,Tahoma,sans-serif;font-size:.76rem;font-weight:700;padding:.58rem 1rem;line-height:1.45;text-align:right;border-bottom:1px solid #a8a8a8;letter-spacing:.01em}
@@ -308,6 +310,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .om-xls-grid tbody tr:nth-child(even) td{background:#f7f7f7}
 .om-xls-grid td.om-xls-small,.om-xls-grid th.om-xls-small{background:#edf7ed!important;border-color:#9ccc9c!important;color:#14532d!important;font-weight:700}
 .om-xls-grid th.om-xls-plate,.om-xls-grid td.om-xls-plate{font-weight:800!important;color:#0f172a}
+.om-xls-grid td.om-plate-dup{background:rgba(250,204,21,.42)!important;box-shadow:inset 0 0 0 1px rgba(217,119,6,.4)}
+body.light .om-xls-grid td.om-plate-dup{background:rgba(253,224,71,.55)!important;box-shadow:inset 0 0 0 1px rgba(202,138,4,.35)}
 .om-xls-grid td.om-xls-small.om-xls-plate,.om-xls-grid th.om-xls-small.om-xls-plate{color:#14532d!important;font-weight:800!important}
 /* Tafrigh data table: same Excel-like shell as الفرز preview; fixed scroll height */
 .tafrigh-xls-scroll{height:min(52vh,460px);max-height:460px;min-height:240px;overflow:auto;background:#fcfcfc;direction:rtl;border-top:1px solid #c5c5c5}
@@ -332,40 +336,26 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 .check-result-box.green-accent{border-color:rgba(34,197,94,.3)}
 .stat-lbl{font-size:.68rem;color:var(--dim2);margin-top:.2rem}
 /* ── Live check (Gemini Live) ── */
-.live-plate-item{padding:.55rem .85rem;border-radius:8px;margin-bottom:.4rem;font-family:var(--mono);font-size:.84rem;font-weight:600}
-.live-plate-item.hit{background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.4);color:var(--green)}
+.live-plate-item{padding:.55rem .85rem;border-radius:8px;margin-bottom:.4rem;font-family:var(--mono);font-size:.84rem;font-weight:600;width:100%}
+.live-plate-item.hit{background:rgba(34,197,94,.2);border:2px solid rgba(34,197,94,.65);color:var(--green);font-size:1.42rem;font-weight:900;letter-spacing:.02em;padding:.88rem 1.05rem;box-shadow:0 0 0 2px rgba(34,197,94,.12),0 8px 22px rgba(34,197,94,.22);animation:checkHitPulse .7s ease-out 1}
 .live-plate-item.miss{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:var(--red)}
 .live-plate-item.unk{background:var(--s2);border:1px solid var(--brd2);color:var(--dim2)}
-.check-live-plate-wrap{margin-top:.85rem}
+.check-live-plate-wrap{margin-top:.85rem;width:100%}
 .check-live-plate-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.55rem;flex-wrap:wrap}
 .check-live-plate-head .ptitle-inline{font-size:.78rem;font-weight:800;color:var(--text);font-family:var(--ar)}
-.check-live-plate-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;direction:rtl;align-items:start}
-.check-live-col{display:flex;flex-direction:column;min-width:0}
+.check-live-plate-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:.65rem;direction:rtl;align-items:start;width:100%}
+.check-live-col{display:flex;flex-direction:column;min-width:0;width:100%}
 .check-live-col-h{font-size:.7rem;font-weight:800;margin-bottom:.4rem;padding:.38rem .5rem;border-radius:6px;text-align:center;font-family:var(--ar);line-height:1.35}
 .check-live-col-h.hit{background:rgba(34,197,94,.18);color:var(--green);border:1px solid rgba(34,197,94,.35)}
 .check-live-col-h.miss{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.35)}
-.check-live-plate-scroll{min-height:3rem;max-height:36vh;overflow-y:auto;border:1px solid var(--brd2);border-radius:8px;padding:.45rem;background:var(--s1)}
+.check-live-plate-scroll{min-height:3rem;max-height:36vh;overflow-y:auto;border:1px solid var(--brd2);border-radius:8px;padding:.45rem;background:var(--s1);width:100%}
 @media(max-width:520px){.check-live-plate-grid{grid-template-columns:1fr}}
+@keyframes checkHitPulse{
+  0%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,.55)}
+  35%{transform:scale(1.045);box-shadow:0 0 0 12px rgba(34,197,94,.12)}
+  100%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,0)}
+}
 
-/* ── Activity log ── */
-.log-panel{background:var(--s1);border:1px solid var(--brd);border-radius:var(--r);margin-bottom:1rem;box-shadow:var(--card-shadow);overflow:hidden}
-.log-header{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;cursor:pointer;user-select:none;background:var(--s2)}
-.log-header:hover{background:var(--s3)}
-.log-title{font-size:.68rem;font-family:var(--mono);color:var(--sky);text-transform:uppercase;letter-spacing:.1em;flex:1}
-.log-toggle{font-size:.72rem;color:var(--dim2);font-family:var(--mono);transition:transform .2s}
-.log-toggle.open{transform:rotate(180deg)}
-.log-body{display:none;padding:.6rem .8rem;max-height:180px;overflow-y:auto;font-family:var(--mono);font-size:.7rem;direction:ltr}
-.log-body.open{display:block}
-.log-entry{padding:.18rem 0;border-bottom:1px solid var(--brd);display:flex;gap:.6rem;align-items:flex-start}
-.log-entry:last-child{border-bottom:none}
-.log-time{color:var(--dim2);white-space:nowrap;flex-shrink:0}
-.log-msg{flex:1;word-break:break-word}
-.log-msg.info{color:var(--sky)}
-.log-msg.ok{color:var(--green)}
-.log-msg.err{color:var(--red)}
-.log-msg.warn{color:var(--amber)}
-.log-clear{padding:.15rem .5rem;border-radius:4px;background:transparent;border:1px solid var(--brd2);cursor:pointer;color:var(--dim2);font-size:.65rem;font-family:var(--mono);transition:all .15s}
-.log-clear:hover{border-color:var(--red);color:var(--red)}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--brd);border-radius:3px}
@@ -393,7 +383,10 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <label class="lbl">اسم المستخدم</label>
     <input type="text" id="authUsername" placeholder="username" />
     <label class="lbl" style="margin-top:.5rem">كلمة المرور</label>
-    <input type="password" id="authPassword" placeholder="password" />
+    <div class="pw-row" style="margin-top:.35rem">
+      <input type="password" id="authPassword" placeholder="password" />
+      <button type="button" class="pw-toggle" onclick="togglePw('authPassword',this)" title="إظهار/إخفاء">👁</button>
+    </div>
     <label class="lbl" style="margin-top:.5rem">Device ID</label>
     <input type="text" id="authDeviceId" />
     <div class="auth-actions">
@@ -425,7 +418,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <h2>&#x1F4D6; تعليمات الاستخدام</h2>
     <div id="instrContent">
       <p><strong>المفاتيح:</strong> Redis أو البيئة على الخادم. <strong>الموديلات:</strong> تُضاف من لوحة Admin. للمستخدم العادي يُختار أول موديل مفعّل تلقائياً.</p>
-      <p><strong>1. التفريغ:</strong> سجّل صوتاً بأرقام اللوحات، أضفه للقائمة وأرسله للنموذج. البيانات تُحفظ تلقائياً.</p>
+      <p><strong>1. التسجيل:</strong> التقاط الصوت يتم <strong>داخل الصفحة فقط</strong> (ميكروفون المتصفح) — لا يوجد رفع ملف صوتي من الجهاز. سجّل اللوحات، أضف للقائمة أو أرسل للنموذج؛ البيانات تُحفظ تلقائياً.</p>
       <p><strong>2. الفرز:</strong></p>
       <ul>
         <li>ارفع الملف الكبير والملف الصغير (Excel)، ويُكتشف عمود اللوحة تلقائياً لكليهما.</li>
@@ -434,7 +427,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <p><strong>3. التشيك (Gemini Live):</strong> ارفع ملف Excel مرجعي واحد، يُكتشف عمود اللوحة تلقائياً، ثم استمع مباشرة أو أدخل لوحة يدوياً. المفتاح والموديل من الخادم.</p>
       <div style="margin:.55rem 0 0;padding:.65rem .85rem;background:var(--s2);border:1px solid var(--brd2);border-radius:8px;font-size:.82rem;line-height:1.65;color:var(--dim2)">
         <strong style="color:var(--text)">لو اتقطع الاتصال فوراً أو ظهر 403 في السيرفر:</strong>
-        المتصفح يجب أن يتصل بمسار ثابت <span style="font-family:var(--mono)">/ws/check-live</span> على نفس المضيف (مثلاً <span style="font-family:var(--mono)">ws://127.0.0.1:8000/ws/check-live</span>). مسار مثل <span style="font-family:var(--mono)">/ws//127.0.0.1:8000/…</span> خطأ ويُرفض قبل التوثيق.
+        المتصفح يطلب تذكرة لمرة واحدة من <span style="font-family:var(--mono)">POST /api/check-live/ws-ticket</span> ثم يتصل بـ <span style="font-family:var(--mono)">/ws/check-live?ticket=…</span> على نفس المضيف (مثلاً <span style="font-family:var(--mono)">wss://example.com/ws/check-live?ticket=…</span>). مسار مثل <span style="font-family:var(--mono)">/ws//127.0.0.1:8000/…</span> خطأ ويُرفض قبل التوثيق.
         <br/><br/>
         <strong style="color:var(--text)">لو السيرفر يقفل بـ 1008 من Google بعد الفتح:</strong> ذلك من طرف Google (موديل أو إصدار API). الخادم يستخدم Live على <span style="font-family:var(--mono)">v1beta</span> مع موديل صوتي مدعوم و<code style="font-size:.78rem">outputAudioTranscription</code>؛ تأكد أن المفتاح يدعم نفس الموديل الظاهر في الإعدادات.
       </div>
@@ -447,7 +440,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 <header>
   <div class="logo">&#x1F697;</div>
   <div>
-    <div class="app-title">التفريغ</div>
+    <div class="app-title">التسجيل</div>
     <p>License Plate Extractor &middot; GPS &middot; v5.5</p>
   </div>
   <div class="header-actions">
@@ -458,9 +451,9 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   </div>
 </header>
 
-<!-- TOP NAV: التفريغ | الفرز | التشيك -->
+<!-- TOP NAV: التسجيل | الفرز | التشيك -->
 <div class="top-nav">
-  <button class="tnav-btn tafrigh"        id="navTafrigh"  onclick="switchPage('tafrigh')">&#x1F3D9; التفريغ</button>
+  <button class="tnav-btn tafrigh"        id="navTafrigh"  onclick="switchPage('tafrigh')">&#x1F3D9; التسجيل</button>
   <button class="tnav-btn field active"   id="navField"    onclick="switchPage('field')">&#x1F50D; الفرز</button>
   <button class="tnav-btn checkpage"      id="navCheck"    onclick="switchPage('check')">&#x2705; التشيك</button>
   <button class="tnav-btn checkpage"      id="navGmaps"    onclick="switchPage('gmaps')">&#x1F5FA;&#xFE0F; Google Maps</button>
@@ -471,7 +464,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 <!-- ═══════════ PAGE: TAFRIGH ═══════════ -->
 <div id="pageTafrigh" style="display:none">
 <div class="panel">
-  <div class="ptitle">&#x2699;&#xFE0F; إعدادات التفريغ</div>
+  <div class="ptitle">&#x2699;&#xFE0F; إعدادات التسجيل</div>
   <div class="row2">
     <div><label class="lbl">اسم المسجّل</label><input type="text" id="recorderName" placeholder="أدخل اسمك"/></div>
     <div><label class="lbl">الحي</label><input type="text" id="districtName" placeholder="اختياري — يُصدَّر لكل الصفوف"/></div>
@@ -522,8 +515,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <div class="rec-lbl" id="recLbl2"></div>
     </div>
     <div class="mode-chips">
-      <div class="mchip"    id="mM" onclick="setMode('manual')">&#x1F446; يدوي (ثانوي)</div>
       <div class="mchip sel" id="mA" onclick="setMode('auto')">&#x23F1; تلقائي (أساسي)</div>
+      <div class="mchip"    id="mM" onclick="setMode('manual')">&#x1F446; يدوي (ثانوي)</div>
     </div>
     <div id="autoOpts" style="display:block;margin-bottom:.8rem">
       <label class="lbl">الفترة بين النقاط (ثانية)</label>
@@ -547,24 +540,19 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
   <button id="sendAllBtn" class="send-all-btn" onclick="sendAll()" disabled>&#x26A1; إرسال كل الملفات المعلقة بالترتيب</button>
 </div>
 <div class="status" id="statusBar"><div class="spin" id="spin" style="display:none"></div><span id="statusTxt"></span></div>
-<div class="log-panel" id="logPanel">
-  <div class="log-header" onclick="toggleLog()">
-    <span class="log-title">&#x1F4CB; سجل النشاط</span>
-    <button class="log-clear" onclick="event.stopPropagation();clearLog()">مسح</button>
-    <span class="log-toggle" id="logToggle">&#x25BC;</span>
-  </div>
-  <div class="log-body" id="logBody"></div>
-</div>
 
 <div class="panel">
   <div class="ptitle">&#x1F4CA; جدول البيانات &mdash; قابل للتعديل</div>
   <div class="excel-toolbar">
     <button class="tb-btn primary" onclick="exportExcel()">&#x2B07; تحميل Excel</button>
-    <button class="tb-btn outline" onclick="document.getElementById('xlsIn').click()">&#x1F4E4; رفع Excel موجود</button>
-    <input type="file" id="xlsIn" accept=".xlsx,.xls" onchange="importExcel(this.files[0])"/>
-    <button class="tb-btn outline" onclick="addEmptyRow()">+ صف جديد</button>
+    <button class="tb-btn outline" onclick="document.getElementById('xlsAppendIn').click()">📎 ملف إلحاق للتصدير</button>
+    <input type="file" id="xlsAppendIn" accept=".xlsx,.xls" onchange="onAppendExportFileChange(this.files[0],'tafrigh')" style="display:none"/>
     <button class="tb-btn danger"  onclick="clearTable()">&#x1F5D1; مسح الكل</button>
     <span class="row-count" id="rowCount">0 صف</span>
+  </div>
+  <div class="file-name-row" style="margin-top:.45rem">
+    <span class="fname" id="xlsAppendFname"></span>
+    <button class="rm-btn" id="xlsAppendRemoveBtn" onclick="clearAppendExportFile('tafrigh')">✕ إزالة</button>
   </div>
   <div class="om-xls-sheet" id="tafrighXlsSheet">
     <div class="om-xls-titlebar" id="tafrighSheetTitlebar">بيانات المركبات</div>
@@ -610,14 +598,8 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
         <button class="pw-toggle" onclick="omTogglePw('omLargePw',this)" title="إظهار/إخفاء">&#x1F441;</button>
         <button class="pw-confirm" onclick="omConfirmLargePw()" title="تأكيد كلمة المرور واكتشاف العمود تلقائياً">تاكيد</button>
       </div>
-      <div style="margin-top:.65rem"><label class="lbl">عمود اللوحة في الملف الكبير</label>
-        <div class="col-detect-row">
-          <select id="omLargeCol" onchange="omOnManualColInput('large')">
-            <option value="">اختر عموداً…</option>
-          </select>
-          <span class="detect-badge pending" id="omLargeColBadge">&mdash;</span>
-        </div>
-      </div>
+      <input type="hidden" id="omLargeCol" value="رقم اللوحة"/>
+      <span id="omLargeColBadge" class="detect-badge found" style="display:none" aria-hidden="true"></span>
       <div style="margin-top:.65rem">
         <label class="lbl">أعمدة الملف الكبير في التطابق</label>
         <details class="check-export-drop" id="omCheckLargeExportDrop" style="margin-top:.45rem">
@@ -682,7 +664,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <div class="stat-card"><div class="stat-n red" id="omRUnmatched">&mdash;</div><div class="stat-lbl">غير مطابَقة</div></div>
     </div>
     <div style="font-family:var(--mono);font-size:.73rem;color:var(--dim2);margin-bottom:.9rem;line-height:1.7">
-      عمود الكبير: <span style="color:var(--sky)" id="omRLargeCol">&mdash;</span> &nbsp;|&nbsp; عمود الصغير: <span style="color:var(--violet)" id="omRSmallCol">&mdash;</span>
+      عمود الكبير: <span style="color:var(--sky)" id="omRLargeCol">رقم اللوحة</span> <span style="font-size:.68rem;color:var(--dim2)">(ثابت)</span> &nbsp;|&nbsp; عمود الصغير: <span style="color:var(--violet)" id="omRSmallCol">&mdash;</span>
     </div>
     <p id="omMatchTruncNote" style="display:none;font-size:.72rem;color:var(--amber);margin-bottom:.6rem"></p>
     <div id="omMatchPreviewHost" class="om-match-preview-host" style="display:none"></div>
@@ -775,14 +757,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <button class="rm-btn" id="removeLargeBtn" onclick="removeCheckFile('large')">&#x2715; إزالة</button>
     </div>
     <input type="file" id="largeFileIn" accept=".xlsx,.xls" onchange="onCheckFileChange(this.files[0],'large')"/>
-    <div class="pw-row">
-      <div style="flex:1">
-        <label class="lbl">&#x1F512; كلمة المرور (إن وجدت)</label>
-        <input type="password" id="largePw" placeholder="اتركه فارغاً إن لم يكن محمياً" oninput="resetCheckDetect()"/>
-      </div>
-      <button class="pw-toggle" onclick="togglePw('largePw',this)" title="إظهار/إخفاء">&#x1F441;</button>
-      <button class="pw-confirm" onclick="confirmLargePw()" title="تأكيد كلمة المرور واكتشاف العمود">تاكيد</button>
-    </div>
+    <input type="hidden" id="largePw" value=""/>
     <div style="margin-top:.65rem"><label class="lbl">عمود اللوحة</label>
       <div class="col-detect-row">
         <select id="largeCol" onchange="onManualColInput('large')">
@@ -812,15 +787,12 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
           <div class="check-live-col-h hit">&#x2714; موجود في الشيت</div>
           <div id="checkLivePlateColHit" class="check-live-plate-scroll"></div>
         </div>
-        <div class="check-live-col">
-          <div class="check-live-col-h miss">&#x2716; غير موجود في الشيت</div>
-          <div id="checkLivePlateColMiss" class="check-live-plate-scroll"></div>
-        </div>
       </div>
+      <div id="checkLivePlateColMiss" class="check-live-plate-scroll" style="display:none"></div>
     </div>
 
     <div class="panel violet-accent" style="margin-top:1rem" id="checkSessionSheetPanel">
-      <div class="ptitle violet">&#x1F4C4; جدول جلسة التشيك (مثل التفريغ)</div>
+      <div class="ptitle violet">&#x1F4C4; جدول جلسة التشيك (مثل التسجيل)</div>
       <div style="margin-bottom:.55rem">
         <label class="lbl">&#x1F4DD; اسم ورقة / ملف التصدير</label>
         <input type="text" id="checkSessionSheetName" class="fc-plate-check-input" style="max-width:420px;width:100%;margin-top:.35rem" placeholder="مثال: تشيك زيارة 17-4" dir="rtl" oninput="syncCheckSessionSheetTitle()"/>
@@ -828,15 +800,15 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:.55rem;margin:.55rem 0 .75rem;align-items:end">
         <div>
           <label class="lbl">الحي</label>
-          <input type="text" id="checkSessionDefaultDistrict" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة"/>
+          <input type="text" id="checkSessionDefaultDistrict" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة" oninput="saveCheckSessionData()"/>
         </div>
         <div>
           <label class="lbl">الشارع</label>
-          <input type="text" id="checkSessionDefaultStreet" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة"/>
+          <input type="text" id="checkSessionDefaultStreet" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة" oninput="saveCheckSessionData()"/>
         </div>
         <div>
           <label class="lbl">اسم المسجّل</label>
-          <input type="text" id="checkSessionDefaultRecorder" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة"/>
+          <input type="text" id="checkSessionDefaultRecorder" class="fc-plate-check-input" style="width:100%;margin-top:.25rem" dir="rtl" placeholder="يُملأ في الصفوف الجديدة" oninput="saveCheckSessionData()"/>
         </div>
       </div>
       <div class="om-xls-sheet" id="checkSessionXlsSheet">
@@ -844,16 +816,22 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
         <div class="om-xls-scroll tafrigh-xls-scroll">
           <table class="om-xls-grid" id="checkSessionDataTable">
             <thead><tr>
-              <th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الحي</th><th>الشارع</th><th>ملاحظات</th><th>نوع السيارة</th><th>اسم المسجّل</th><th>موقع الشارع</th><th></th>
+              <th>رقم اللوحة</th><th>GPS</th><th>تاريخ التسجيل</th><th>الحي</th><th>الشارع</th><th>اسم المسجّل</th><th></th>
             </tr></thead>
             <tbody id="checkSessionExcelBody"></tbody>
           </table>
         </div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:.55rem;margin-top:.75rem;align-items:center">
+        <button type="button" class="tb-btn outline" onclick="document.getElementById('checkSessionAppendIn').click()">📎 ملف إلحاق للتصدير</button>
+        <input type="file" id="checkSessionAppendIn" accept=".xlsx,.xls" onchange="onAppendExportFileChange(this.files[0],'check')" style="display:none"/>
         <button type="button" class="dl-btn" onclick="exportCheckSessionExcel()">&#x1F4E5; تصدير Excel</button>
         <button type="button" class="tb-btn outline" onclick="clearCheckSessionRows()">&#x1F5D1; مسح جدول الجلسة</button>
         <span id="checkSessionRowCount" style="font-size:.72rem;color:var(--dim2)">0 صف</span>
+      </div>
+      <div class="file-name-row" style="margin-top:.35rem">
+        <span class="fname violet" id="checkSessionAppendFname"></span>
+        <button class="rm-btn" id="checkSessionAppendRemoveBtn" onclick="clearAppendExportFile('check')">✕ إزالة</button>
       </div>
     </div>
 
@@ -929,7 +907,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <div class="ptitle">&#x1F916; موديلات Gemini (من الخادم)</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.85rem;align-items:end">
       <div>
-        <label class="lbl">التفريغ (REST)</label>
+        <label class="lbl">التسجيل (REST)</label>
         <select id="userRestModel" style="width:100%;padding:.55rem;border-radius:8px;border:1px solid var(--brd2);font-family:var(--mono);font-size:.78rem" onchange="onUserGeminiModelChange()"></select>
       </div>
       <div>
@@ -943,7 +921,13 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
     <div class="ptitle violet">&#x1F6E1;&#xFE0F; Admin</div>
     <div class="row2">
       <div><label class="lbl">اسم المستخدم</label><input type="text" id="admNewUser" placeholder="username"/></div>
-      <div><label class="lbl">كلمة المرور</label><input type="password" id="admNewPass" placeholder="password"/></div>
+      <div>
+        <label class="lbl">كلمة المرور</label>
+        <div class="pw-row" style="margin-top:.35rem">
+          <input type="password" id="admNewPass" placeholder="password"/>
+          <button type="button" class="pw-toggle" onclick="togglePw('admNewPass',this)" title="إظهار/إخفاء">👁</button>
+        </div>
+      </div>
       <div><label class="lbl">حد صفوف المستخدم (إجباري)</label><input type="number" id="admUserRowsLimit" min="1" step="1" value="3000000" placeholder="مثال: 3000000"/></div>
     </div>
     <div style="margin-top:.6rem"><label><input type="checkbox" id="admIsAdmin"/> إنشاء كـ Admin</label></div>
@@ -1036,7 +1020,7 @@ tbody td{padding:.6rem .85rem;vertical-align:middle;font-size:.83rem}
 
 
 </div><!-- wrap -->
-<script src="/static/_om_field.js?v=pgcheck16"></script>
+<script src="/static/_om_field.js?v=pgcheck18"></script>
 <script>
 const MAX_REC_SECS=300;
 // ── State ──────────────────────────────────────────────
@@ -1054,8 +1038,16 @@ let checkLiveWs=null,checkLiveMicOn=false,checkLiveAudioCtx=null,checkLiveScript
 let checkLiveSilenceTimer=null,checkLiveLastVoiceAt=0;
 let checkLiveSfxCtx=null;
 let checkLiveLastHitNotifyKey='',checkLiveLastHitNotifyTs=0;
+const CHECK_SESSION_STORAGE_KEY='checkSessionSheet_v1';
 let checkSessionRows=[];
-const CHECK_LIVE_SILENCE_MS=650;
+let exportAppendRowsTafrigh=[],exportAppendRowsCheck=[];
+let exportAppendFileNameTafrigh='',exportAppendFileNameCheck='';
+/* زمن الاستجابة — Live (بالترتيب):
+   1) CHECK_LIVE_SILENCE_MS: بعد انخفاض الصوت يُرسل end_of_turn → يحدّد نهاية «الدور» عند Google.
+   2) شبكة + موديل Live: حتى يكتمل JSON (أو turnComplete) — خارج تطبيقنا.
+   3) plate_result يقدر ييجي جزئيًا قبل نهاية الدور؛ check_session_sync كان ييجي مع نهاية الدور فقط.
+   جدول الجلسة يُحدَّث أيضًا من plate_result عند found===false لتقليل فجوة الظهور. */
+const CHECK_LIVE_SILENCE_MS=300;
 const CHECK_LIVE_VOICE_RMS_THRESHOLD=0.012;
 const CHECK_LIVE_CLIENT_ID_KEY='checkLiveClientId_v1';
 let checkLiveHeartbeatTimer=null;
@@ -1111,6 +1103,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   loadTable();renderTable();
   if(typeof syncTafrighSheetTitle==='function') syncTafrighSheetTitle();
   if(document.getElementById('fcExtractedSection')) loadFcData();
+  if(document.getElementById('checkSessionExcelBody')) loadCheckSessionData();
   if(typeof loadOmPersistedCheckFiles==='function') loadOmPersistedCheckFiles();
   setMode('auto');
   if(document.getElementById('fcMM')) fcSetMode('auto');
@@ -1153,8 +1146,7 @@ function onUserGeminiModelChange(){
   checkReady(); fcCheckReady();
 }
 async function refreshUserGeminiModels(){
-  const tok=localStorage.getItem('access_token')||'';
-  if(!tok){
+  if(localStorage.getItem('auth_session_v1')!=='1'){
     _geminiModelsCacheRest=[];_geminiModelsCacheLive=[];
     const sr=document.getElementById('userRestModel'),sl=document.getElementById('userLiveModel');
     if(sr) sr.innerHTML='';
@@ -1759,24 +1751,6 @@ function friendlyError(raw){
   if(clean.length>140) clean=clean.slice(0,140)+'…';
   return clean||'خطأ غير معروف — أعد المحاولة';
 }
-// ── Activity log ──────────────────────────────────────
-let _logOpen=false;
-function addLog(msg,type){
-  type=type||'info';
-  const body=document.getElementById('logBody');if(!body)return;
-  const now=new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  const entry=document.createElement('div');entry.className='log-entry';
-  entry.innerHTML='<span class="log-time">'+now+'</span><span class="log-msg '+type+'">'+esc(msg)+'</span>';
-  body.appendChild(entry);body.scrollTop=body.scrollHeight;
-  while(body.children.length>100)body.removeChild(body.firstChild);
-}
-function toggleLog(){
-  _logOpen=!_logOpen;
-  document.getElementById('logBody').classList.toggle('open',_logOpen);
-  document.getElementById('logToggle').classList.toggle('open',_logOpen);
-}
-function clearLog(){document.getElementById('logBody').innerHTML='';}
-
 function _beep(freqs,dur=0.18,vol=0.25){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();freqs.forEach(([f,t])=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0,ctx.currentTime+t);g.gain.linearRampToValueAtTime(vol,ctx.currentTime+t+0.02);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+dur);o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+dur+0.05);});}catch(e){}}
 function playPinSound(){_beep([[880,0],[440,0.1]]);}
 function playStartSound(){_beep([[440,0],[660,0.1]]);}
@@ -1887,7 +1861,6 @@ function addToQueue(){
   queueItems.push({id:uid(),blob,url:URL.createObjectURL(blob),gps,name,dur,status:'pending'});
   renderQueue();
   _resetLiveUI();
-  addLog('أُضيف للقائمة: '+name,'info');
   showStatus('ok','✔ أُضيف إلى القائمة');
 }
 
@@ -1906,7 +1879,7 @@ async function pollTranscribeStatus(jobId){
       if(d.storage==='file'&&d.kind==='transcribe'){
         const tr=await fetch('/api/transcribe/result/'+encodeURIComponent(jobId));
         const tj=await tr.json().catch(()=>({}));
-        if(!tr.ok) throw new Error(tj.detail||tr.statusText||'تعذّر جلب نتيجة التفريغ');
+        if(!tr.ok) throw new Error(tj.detail||tr.statusText||'تعذّر جلب نتيجة التسجيل');
         return tj;
       }
       return payload.data;
@@ -1914,7 +1887,7 @@ async function pollTranscribeStatus(jobId){
     if(payload.status==='error') throw new Error(payload.detail||'An internal error occurred. Please try again.');
     await new Promise(res=>setTimeout(res,1200));
   }
-  throw new Error('انتهت مهلة انتظار التفريغ');
+  throw new Error('انتهت مهلة انتظار التسجيل');
 }
 function _districtFromInput(){
   const el=document.getElementById('districtName');
@@ -1944,7 +1917,6 @@ async function directSend(){
   // reset live UI after direct send
   _resetLiveUI();
 
-  addLog('\u0625\u0631\u0633\u0627\u0644 \u0645\u0628\u0627\u0634\u0631: '+name,'info');
   showStatus('proc','\u062C\u0627\u0631\u064A \u0627\u0644\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0645\u0628\u0627\u0634\u0631\u2026',true);
 
   const fd=new FormData();
@@ -1970,12 +1942,11 @@ async function directSend(){
     saveTable();renderTable();
     const total=typeof data.total==='number'?data.total:(Array.isArray(data.plates)?data.plates.length:0);
     const msg='\u2714 \u062A\u0645 \u0627\u0644\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0645\u0628\u0627\u0634\u0631 \u2014 \u0627\u0633\u062A\u064F\u062E\u0631\u062C '+total+' \u0644\u0648\u062D\u0629';
-    showStatus('ok',msg);addLog(msg,'ok');
+    showStatus('ok',msg);
   }catch(rawErr){
     const msg=friendlyError(rawErr.message);
     item.status='error';item.lastError=msg;renderQueue();
     showStatus('warn','\u26A0 \u0641\u0634\u0644 \u0627\u0644\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0645\u0628\u0627\u0634\u0631 \u2014 '+msg);
-    addLog('\u0641\u0634\u0644: '+msg,'err');
   }
 }
 
@@ -2046,11 +2017,10 @@ function removeItem(idx){
 }
 async function sendItem(idx){
   const item=queueItems[idx];if(!item)return;
-  if(item.status==='processing'){addLog('تحذير: '+item.name+' قيد المعالجة بالفعل','warn');return;}
+  if(item.status==='processing'){showStatus('warn','تحذير: '+item.name+' قيد المعالجة بالفعل');return;}
   if(!getUserRestModel()){showStatus('err','لا يوجد موديل REST مفعّل على الخادم — أضفه من صفحة Admin.');return;}
   item.status='processing';item.lastError=null;renderQueue();
   showStatus('proc','جاري تحليل "'+item.name+'" …',true);
-  addLog('بدء تحليل: '+item.name,'info');
   const fd=new FormData();
   const ext=audioBlobExt(item.blob);
   fd.append('audio',item.blob,'recording.'+ext);
@@ -2073,25 +2043,22 @@ async function sendItem(idx){
     saveTable();renderTable();
     const total=typeof data.total==='number'?data.total:(Array.isArray(data.plates)?data.plates.length:0);
     const msg='✔ استُخرج '+total+' لوحة من "'+item.name+'"';
-    showStatus('ok',msg);addLog(msg,'ok');
+    showStatus('ok',msg);
   }catch(rawErr){
     const msg=friendlyError(rawErr.message);
     item.status='error';item.lastError=msg;renderQueue();
     showStatus('err',msg);
-    addLog('فشل "'+item.name+'": '+msg,'err');
   }
 }
 async function sendAll(){
   const pending=queueItems.filter(i=>i.status==='pending'||i.status==='error');
   if(!pending.length){showStatus('warn','لا توجد ملفات معلقة للإرسال');return;}
-  addLog('بدء الإرسال التسلسلي — '+pending.length+' ملف','info');
   for(const item of pending){
     const idx=queueItems.indexOf(item);
     if(idx===-1||item.status==='done')continue;
     await sendItem(idx);
     await new Promise(r=>setTimeout(r,600));
   }
-  addLog('انتهى الإرسال التسلسلي','ok');
 }
 async function sendAllQueued(){await sendAll();}
 // ── Excel table ───────────────────────────────────────
@@ -2142,7 +2109,6 @@ function renderTable(){
 }
 function editCell(idx,key,val){if(tableRows[idx])tableRows[idx][key]=val.trim();saveTable();}
 function deleteRow(idx){tableRows.splice(idx,1);saveTable();renderTable();}
-function addEmptyRow(){tableRows.push({full_plate:'',vehicle_type:'ملاكى',district_name:'',street_name:'',gps:'',location_details:'',recorder_name:'',recording_date:'',street_location:''});saveTable();renderTable();}
 function clearTable(){if(!tableRows.length)return;if(confirm('هل تريد مسح كل الصفوف؟')){tableRows=[];saveTable();renderTable();}}
 
 function midGpsValue(rows){
@@ -2152,12 +2118,15 @@ function midGpsValue(rows){
   return v.trim();
 }
 async function exportExcel(){
-  if(!tableRows.length){showStatus('err','الجدول فارغ');return;}
+  const appendRows=Array.isArray(exportAppendRowsTafrigh)?exportAppendRowsTafrigh:[];
+  const curRows=Array.isArray(tableRows)?tableRows:[];
+  const mergedRows=[...appendRows,...curRows];
+  if(!mergedRows.length){showStatus('err','الجدول فارغ');return;}
   const sheetName=document.getElementById('sheetName').value.trim()||'بيانات المركبات';
   showStatus('proc','جاري تصدير Excel …',true);
   try{
     const fd=new FormData();
-    fd.append('rows_json',JSON.stringify(tableRows));
+    fd.append('rows_json',JSON.stringify(mergedRows));
     fd.append('sheet_name',sheetName);
     fd.append('district_default',(document.getElementById('districtName')&&document.getElementById('districtName').value||'').trim());
     const res=await fetch('/api/export-excel',{method:'POST',body:fd});
@@ -2165,19 +2134,61 @@ async function exportExcel(){
     triggerDownload(await res.blob(),'تفريغ_'+sheetName+'.xlsx');showStatus('ok','✔ تم تحميل ملف Excel');
   }catch(e){showStatus('err','خطأ في التصدير: '+e.message);}
 }
-async function importExcel(f){
-  if(!f)return;showStatus('proc','جاري قراءة الملف …',true);
+function renderAppendExportMeta(kind){
+  if(kind==='check'){
+    const n=document.getElementById('checkSessionAppendFname');
+    const r=document.getElementById('checkSessionAppendRemoveBtn');
+    if(n) n.textContent=exportAppendFileNameCheck?('📎 '+exportAppendFileNameCheck+' ('+exportAppendRowsCheck.length+' صف)'):'';
+    if(r) r.classList.toggle('show',!!exportAppendFileNameCheck);
+    return;
+  }
+  const n=document.getElementById('xlsAppendFname');
+  const r=document.getElementById('xlsAppendRemoveBtn');
+  if(n) n.textContent=exportAppendFileNameTafrigh?('📎 '+exportAppendFileNameTafrigh+' ('+exportAppendRowsTafrigh.length+' صف)'):'';
+  if(r) r.classList.toggle('show',!!exportAppendFileNameTafrigh);
+}
+async function onAppendExportFileChange(file,kind){
+  if(!file) return;
+  const showFn=kind==='check'?showCheckStatus:showStatus;
+  showFn('proc','جاري قراءة ملف الإلحاق والتحقق من الأعمدة …',true);
   try{
-    const fd=new FormData();fd.append('file',f);
-    const res=await fetch('/api/parse-excel',{method:'POST',body:fd});
-    if(!res.ok){const err=await res.json().catch(()=>({detail:res.statusText}));throw new Error(err.detail||res.statusText);}
-    const data=await res.json();
+    const fd=new FormData();
+    fd.append('file',file);
+    const parseUrl=kind==='check'?'/api/parse-check-session-append':'/api/parse-export-append';
+    const res=await fetch(parseUrl,{method:'POST',body:fd});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.detail||res.statusText||'');
     const rows=Array.isArray(data.rows)?data.rows:[];
-    if(!Array.isArray(tableRows)) tableRows=[];
-    tableRows=[...tableRows,...rows];
-    saveTable();renderTable();showStatus('ok','✔ تم استيراد '+data.total+' صف');
-  }catch(e){showStatus('err','خطأ في الاستيراد: '+e.message);}
-  document.getElementById('xlsIn').value='';
+    if(kind==='check'){
+      exportAppendRowsCheck=rows;
+      exportAppendFileNameCheck=String(file.name||'');
+    }else{
+      exportAppendRowsTafrigh=rows;
+      exportAppendFileNameTafrigh=String(file.name||'');
+    }
+    renderAppendExportMeta(kind);
+    showFn('ok','✔ تم تجهيز ملف الإلحاق ('+rows.length+' صف). سيتم دمجه وقت التصدير.',false);
+  }catch(e){
+    if(kind==='check'){
+      exportAppendRowsCheck=[]; exportAppendFileNameCheck='';
+    }else{
+      exportAppendRowsTafrigh=[]; exportAppendFileNameTafrigh='';
+    }
+    renderAppendExportMeta(kind);
+    showFn('err','خطأ في ملف الإلحاق: '+(e&&e.message?e.message:String(e)),false);
+  }finally{
+    const inId=kind==='check'?'checkSessionAppendIn':'xlsAppendIn';
+    const inp=document.getElementById(inId);
+    if(inp) inp.value='';
+  }
+}
+function clearAppendExportFile(kind){
+  if(kind==='check'){
+    exportAppendRowsCheck=[]; exportAppendFileNameCheck='';
+  }else{
+    exportAppendRowsTafrigh=[]; exportAppendFileNameTafrigh='';
+  }
+  renderAppendExportMeta(kind);
 }
 // ── التشيك — Gemini Live ────────────────────────────────
 let checkLiveExcelReady=false;
@@ -2355,14 +2366,57 @@ function checkLivePlayHitBeep(){
     const o=ctx.createOscillator();
     const g=ctx.createGain();
     o.connect(g); g.connect(ctx.destination);
-    o.type='sine';
-    o.frequency.value=880;
+    o.type='triangle';
+    o.frequency.value=990;
     const t0=ctx.currentTime;
     g.gain.setValueAtTime(0,t0);
-    g.gain.linearRampToValueAtTime(0.11,t0+0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001,t0+0.2);
+    g.gain.linearRampToValueAtTime(0.24,t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+0.28);
     o.start(t0);
-    o.stop(t0+0.22);
+    o.stop(t0+0.3);
+
+    const o2=ctx.createOscillator();
+    const g2=ctx.createGain();
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.type='sine';
+    o2.frequency.value=1320;
+    g2.gain.setValueAtTime(0,t0+0.08);
+    g2.gain.linearRampToValueAtTime(0.2,t0+0.095);
+    g2.gain.exponentialRampToValueAtTime(0.0001,t0+0.3);
+    o2.start(t0+0.08);
+    o2.stop(t0+0.32);
+  }catch(_e){}
+}
+/** صوت خفيف منخفض عند إدراج لوحة جديدة في جدول جلسة التشيك (غير موجودة في شيت المرجع) — مختلف وأهدأ من صوت «موجود في الشيت». */
+function checkLivePlaySessionSheetNewBeep(){
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(!Ctx) return;
+    if(!checkLiveSfxCtx||checkLiveSfxCtx.state==='closed') checkLiveSfxCtx=new Ctx();
+    const ctx=checkLiveSfxCtx;
+    if(ctx.state==='suspended') ctx.resume().catch(function(){});
+    const t0=ctx.currentTime;
+    const peak=0.075;
+    const o=ctx.createOscillator();
+    const g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type='sine';
+    o.frequency.value=392;
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(peak,t0+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+0.16);
+    o.start(t0);
+    o.stop(t0+0.18);
+    const o2=ctx.createOscillator();
+    const g2=ctx.createGain();
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.type='sine';
+    o2.frequency.value=523.25;
+    g2.gain.setValueAtTime(0,t0+0.07);
+    g2.gain.linearRampToValueAtTime(peak*0.72,t0+0.085);
+    g2.gain.exponentialRampToValueAtTime(0.0001,t0+0.2);
+    o2.start(t0+0.07);
+    o2.stop(t0+0.22);
   }catch(_e){}
 }
 function checkLiveNotifyPlateHit(plateStr){
@@ -2372,7 +2426,7 @@ function checkLiveNotifyPlateHit(plateStr){
   checkLiveLastHitNotifyKey=key;
   checkLiveLastHitNotifyTs=now;
   if(typeof navigator.vibrate==='function'){
-    try{ navigator.vibrate([65,40,75]); }catch(_v){}
+    try{ navigator.vibrate([140,60,170,60,140]); }catch(_v){}
   }
   checkLivePlayHitBeep();
 }
@@ -2381,15 +2435,30 @@ function checkLiveAppendResultRow(data){
   const missCol=document.getElementById('checkLivePlateColMiss');
   const list=data.found===true?hitCol:missCol;
   if(!list) return;
+  const plateText=String(data.plate||'\u2014');
+  const nk=normPlate(plateText);
+  if(data.found===true && nk){
+    const kids=list.children||[];
+    for(let i=0;i<kids.length;i++){
+      const el=kids[i];
+      if(String(el.dataset&&el.dataset.nk||'')!==nk) continue;
+      el.textContent=plateText;
+      if(el!==list.firstChild) list.insertBefore(el,list.firstChild);
+      // retrigger highlight without duplicating cards
+      el.classList.remove('hit');
+      void el.offsetWidth;
+      el.classList.add('hit');
+      checkLiveNotifyPlateHit(plateText);
+      return;
+    }
+  }
   const div=document.createElement('div');
   div.className='live-plate-item ';
   if(data.found===true) div.className+='hit';
   else if(data.found===false) div.className+='miss';
   else div.className+='unk';
-  let extra='';
-  if(data.sheet) extra=' \u00B7 '+String(data.sheet);
-  if(data.needs_plate_column) extra+=' \u00B7 \u0627\u062E\u062A\u0631 \u0639\u0645\u0648\u062F \u0627\u0644\u0644\u0648\u062D\u0629';
-  div.textContent=(data.plate||'\u2014')+extra;
+  div.textContent=plateText;
+  if(nk) div.dataset.nk=nk;
   list.insertBefore(div,list.firstChild);
   if(data.found===true) checkLiveNotifyPlateHit(data.plate||'');
 }
@@ -2406,34 +2475,68 @@ function syncCheckSessionSheetTitle(){
   const inp=document.getElementById('checkSessionSheetName');
   if(!bar||!inp) return;
   bar.textContent=inp.value.trim()||'\u0628\u064A\u0627\u0646\u0627\u062A \u0645\u0631\u0643\u0628\u0627\u062A \u0627\u0644\u062C\u0644\u0633\u0629';
+  saveCheckSessionData();
 }
-function checkSessionStreetLocForRow(row){
-  if(row && row.street_location!=null && String(row.street_location).trim()!=='') return String(row.street_location).trim();
-  const g=(row&&row.gps)?String(row.gps).trim():'';
-  return g;
+function saveCheckSessionData(){
+  try{
+    if(!Array.isArray(checkSessionRows)) checkSessionRows=[];
+    var sn=document.getElementById('checkSessionSheetName');
+    var dd=document.getElementById('checkSessionDefaultDistrict');
+    var st=document.getElementById('checkSessionDefaultStreet');
+    var rn=document.getElementById('checkSessionDefaultRecorder');
+    var payload={
+      rows:checkSessionRows,
+      sheetName:sn?String(sn.value||''):'',
+      defaultDistrict:dd?String(dd.value||''):'',
+      defaultStreet:st?String(st.value||''):'',
+      defaultRecorder:rn?String(rn.value||''):''
+    };
+    localStorage.setItem(CHECK_SESSION_STORAGE_KEY,JSON.stringify(payload));
+  }catch(e){}
+}
+function loadCheckSessionData(){
+  if(!document.getElementById('checkSessionExcelBody')) return;
+  try{
+    var raw=localStorage.getItem(CHECK_SESSION_STORAGE_KEY);
+    if(!raw) return;
+    var o=JSON.parse(raw);
+    if(!o||typeof o!=='object') return;
+    checkSessionRows=Array.isArray(o.rows)?o.rows:[];
+    var sn=document.getElementById('checkSessionSheetName');
+    if(sn&&o.sheetName!=null) sn.value=String(o.sheetName);
+    var dd=document.getElementById('checkSessionDefaultDistrict');
+    if(dd&&o.defaultDistrict!=null) dd.value=String(o.defaultDistrict);
+    var st=document.getElementById('checkSessionDefaultStreet');
+    if(st&&o.defaultStreet!=null) st.value=String(o.defaultStreet);
+    var rn=document.getElementById('checkSessionDefaultRecorder');
+    if(rn&&o.defaultRecorder!=null) rn.value=String(o.defaultRecorder);
+    syncCheckSessionSheetTitle();
+    renderCheckSessionTable();
+  }catch(e){}
 }
 function renderCheckSessionTable(){
   if(!Array.isArray(checkSessionRows)) checkSessionRows=[];
   const body=document.getElementById('checkSessionExcelBody');
   if(!body) return;
   body.innerHTML='';
-  checkSessionRows.forEach(function(row,i){
-    const tr=document.createElement('tr');
+  /* جدول جلسة التشيك: الأحدث في أول صف (قدام العين)، الأقدم في آخر صف. التصدير يبقى أقدم→أحدث. */
+  for(var ri=checkSessionRows.length-1;ri>=0;ri--){
+    var row=checkSessionRows[ri];
+    var i=ri;
+    var tr=document.createElement('tr');
     tr.innerHTML=
       '<td class="td-plate td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'full_plate\',this.textContent)">'+esc(row.full_plate||row.plate||'')+'</td>'
       +'<td class="td-gps">'+esc(row.gps||'\u2014')+'</td>'
       +'<td class="td-edit" style="font-family:var(--mono);font-size:.78rem" contenteditable="true" onblur="editCheckSessionCell('+i+',\'recording_date\',this.textContent)">'+esc(row.recording_date||'')+'</td>'
       +'<td class="td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'district_name\',this.textContent)">'+esc(row.district_name||'')+'</td>'
       +'<td class="td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'street_name\',this.textContent)">'+esc(row.street_name||'')+'</td>'
-      +'<td class="td-edit td-locdetails" style="font-size:.78rem;color:var(--dim2)" contenteditable="true" onblur="editCheckSessionCell('+i+',\'location_details\',this.textContent)">'+esc(row.location_details||'')+'</td>'
-      +'<td class="td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'vehicle_type\',this.textContent)">'+esc(row.vehicle_type||'')+'</td>'
       +'<td class="td-edit" contenteditable="true" onblur="editCheckSessionCell('+i+',\'recorder_name\',this.textContent)">'+esc(row.recorder_name||'')+'</td>'
-      +'<td class="td-gps">'+esc(checkSessionStreetLocForRow(row)||'\u2014')+'</td>'
       +'<td><button class="del-row" onclick="deleteCheckSessionRow('+i+')">\u2715</button></td>';
     body.appendChild(tr);
-  });
+  }
   const rc=document.getElementById('checkSessionRowCount');
   if(rc) rc.textContent=checkSessionRows.length+' \u0635\u0641';
+  saveCheckSessionData();
 }
 function editCheckSessionCell(idx,key,val){
   if(checkSessionRows[idx]) checkSessionRows[idx][key]=String(val||'').trim();
@@ -2492,19 +2595,44 @@ function checkLiveMaybeAppendSessionRow(data){
   var rn=document.getElementById('checkSessionDefaultRecorder');
   const row={
     full_plate:plate,
-    vehicle_type:'\u0645\u0644\u0627\u0643\u0649',
     district_name:(dn&&dn.value||'').trim(),
     street_name:(sn&&sn.value||'').trim(),
     gps:'',
-    location_details:'',
     recorder_name:(rn&&rn.value||'').trim(),
-    recording_date:recording,
-    street_location:''};
+    recording_date:recording};
   if(!Array.isArray(checkSessionRows)) checkSessionRows=[];
   checkSessionRows.push(row);
   const idx=checkSessionRows.length-1;
   renderCheckSessionTable();
   checkLiveFillGpsForSessionRow(idx);
+  if(typeof navigator.vibrate==='function'){
+    try{ navigator.vibrate([55,35,70]); }catch(_v){}
+  }
+  checkLivePlaySessionSheetNewBeep();
+}
+function checkLiveUpdateSessionRowByNorm(nk,plate){
+  if(!nk||!Array.isArray(checkSessionRows)) return false;
+  for(let i=0;i<checkSessionRows.length;i++){
+    const row=checkSessionRows[i]||{};
+    if(normPlate(row.full_plate||'')!==nk) continue;
+    const now=new Date();
+    const recording=now.toLocaleString('en-GB',{
+      year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'2-digit',minute:'2-digit',hour12:false
+    });
+    var dn=document.getElementById('checkSessionDefaultDistrict');
+    var sn=document.getElementById('checkSessionDefaultStreet');
+    var rn=document.getElementById('checkSessionDefaultRecorder');
+    row.full_plate=String(plate||row.full_plate||'').trim();
+    row.recording_date=recording;
+    if(dn&&String(dn.value||'').trim()) row.district_name=String(dn.value||'').trim();
+    if(sn&&String(sn.value||'').trim()) row.street_name=String(sn.value||'').trim();
+    if(rn&&String(rn.value||'').trim()) row.recorder_name=String(rn.value||'').trim();
+    checkSessionRows[i]=row;
+    renderCheckSessionTable();
+    return true;
+  }
+  return false;
 }
 function checkLiveRemoveSessionRowsByNorm(nk){
   if(!nk||!Array.isArray(checkSessionRows)) return;
@@ -2531,16 +2659,16 @@ function checkLiveSyncSessionFromItems(items){
       continue;
     }
     if(it.found===false){
-      let dup=false;
-      for(let j=0;j<checkSessionRows.length;j++){
-        if(normPlate(checkSessionRows[j].full_plate||'')===nk){ dup=true; break; }
-      }
-      if(!dup) checkLiveMaybeAppendSessionRow({plate:plate,found:false});
+      const updated=checkLiveUpdateSessionRowByNorm(nk,plate);
+      if(!updated) checkLiveMaybeAppendSessionRow({plate:plate,found:false});
     }
   }
 }
 async function exportCheckSessionExcel(){
-  if(!Array.isArray(checkSessionRows)||!checkSessionRows.length){
+  const appendRows=Array.isArray(exportAppendRowsCheck)?exportAppendRowsCheck:[];
+  const curRows=Array.isArray(checkSessionRows)?checkSessionRows:[];
+  const mergedRows=[...appendRows,...curRows];
+  if(!mergedRows.length){
     showCheckStatus('err','\u0627\u0644\u062C\u062F\u0648\u0644 \u0641\u0627\u0631\u063A');
     return;
   }
@@ -2548,9 +2676,9 @@ async function exportCheckSessionExcel(){
   showCheckStatus('proc','\u062C\u0627\u0631\u064A \u062A\u0635\u062F\u064A\u0631 Excel \u2026',true);
   try{
     const fd=new FormData();
-    fd.append('rows_json',JSON.stringify(checkSessionRows));
+    fd.append('rows_json',JSON.stringify(mergedRows));
     fd.append('sheet_name',sheetName);
-    const res=await fetch('/api/export-excel',{method:'POST',body:fd});
+    const res=await fetch('/api/export-check-session',{method:'POST',body:fd});
     if(!res.ok){
       const err=await res.json().catch(function(){return{};});
       throw new Error((err&&err.detail)||res.statusText||'');
@@ -2587,7 +2715,12 @@ function checkLiveOnMessage(ev){
     return;
   }
   if(t==='plate_result'){
-    checkLiveAppendResultRow(j.data||{});
+    const d=j.data||{};
+    checkLiveAppendResultRow(d);
+    if(d.found===false){
+      const p=String(d.plate||'').trim();
+      if(p) checkLiveSyncSessionFromItems([{plate:p,found:false,moving:false}]);
+    }
     return;
   }
   if(t==='check_session_sync'){
@@ -2614,9 +2747,17 @@ async function checkLivePushWorkbook(){
     return;
   }
   try{
-    const b64=await fileToB64(checkLargeFile);
+    const fd=new FormData();
+    fd.append('file',checkLargeFile,checkLargeFile.name||'live.xlsx');
+    const ur=await fetch('/api/check-live/upload-excel',{method:'POST',body:fd});
+    const uj=await ur.json().catch(function(){ return {}; });
+    if(!ur.ok || !uj.upload_token){
+      const det=(uj&&uj.detail)?String(uj.detail):'\u0641\u0634\u0644 \u0631\u0641\u0639 \u0645\u0644\u0641 Excel';
+      showCheckStatus('err',det);
+      return;
+    }
     const pw=document.getElementById('largePw').value.trim();
-    checkLiveWs.send(JSON.stringify({type:'excel_upload',data:b64,password:pw}));
+    checkLiveWs.send(JSON.stringify({type:'excel_upload_ref',upload_token:String(uj.upload_token),password:pw}));
   }catch(e){
     showCheckStatus('err','\u0641\u0634\u0644 \u0642\u0631\u0627\u0621\u0629 \u0627\u0644\u0645\u0644\u0641');
   }
@@ -2684,14 +2825,28 @@ function checkLiveStartHeartbeat(){
   },25000);
 }
 async function checkLiveEnsureSocket(){
-  const tok=localStorage.getItem('access_token')||'';
-  if(!tok){ showCheckStatus('err','\u0633\u062C\u0651\u0644 \u0627\u0644\u062F\u062E\u0648\u0644 \u0623\u0648\u0644\u0627\u064B'); return false; }
+  if(localStorage.getItem('auth_session_v1')!=='1'){ showCheckStatus('err','\u0633\u062C\u0651\u0644 \u0627\u0644\u062F\u062E\u0648\u0644 \u0623\u0648\u0644\u0627\u064B'); return false; }
   const lm=(typeof getUserLiveModel==='function'?getUserLiveModel():'').trim();
   if(!lm){ showCheckStatus('err','\u0644\u0627 \u064A\u0648\u062C\u062F \u0645\u0648\u062F\u064A\u0644 Live \u0645\u0641\u0639\u0651\u0644 \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645 \u2014 \u0623\u0636\u0641\u0647 \u0645\u0646 \u0635\u0641\u062D\u0629 Admin.'); return false; }
   if(checkLiveWs && checkLiveWs.readyState===1) return true;
   if(checkLiveWs){
     try{ checkLiveWs.close(); }catch(e){}
     checkLiveWs=null;
+  }
+  let wsTicket='';
+  try{
+    const tr=await fetch('/api/check-live/ws-ticket',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const tj=await tr.json().catch(function(){ return {}; });
+    if(!tr.ok){
+      const det=typeof tj.detail==='string'?tj.detail:(Array.isArray(tj.detail)?tj.detail.map(function(x){return x&&x.msg?String(x.msg):'';}).join(' '):'');
+      showCheckStatus('err',det||'\u062A\u0639\u0630\u0631 \u0625\u0635\u062F\u0627\u0631 \u062A\u0630\u0643\u0631\u0629 \u0627\u0644\u0627\u062A\u0635\u0627\u0644');
+      return false;
+    }
+    wsTicket=String(tj.ticket||'');
+    if(!wsTicket){ showCheckStatus('err','\u062A\u0639\u0630\u0631 \u0625\u0635\u062F\u0627\u0631 \u062A\u0630\u0643\u0631\u0629 \u0627\u0644\u0627\u062A\u0635\u0627\u0644'); return false; }
+  }catch(_e){
+    showCheckStatus('err','\u062A\u0639\u0630\u0631 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0628\u0627\u0644\u062E\u0627\u062F\u0645');
+    return false;
   }
   return new Promise(function(resolve){
     let settled=false;
@@ -2702,7 +2857,7 @@ async function checkLiveEnsureSocket(){
       if(!settled){ settled=true; clearTimeout(t); resolve(v); }
     }
     const wsUrl=new URL('/ws/check-live',window.location.href);
-    wsUrl.searchParams.set('token',tok);
+    wsUrl.searchParams.set('ticket',wsTicket);
     wsUrl.protocol=location.protocol==='https:'?'wss:':'ws:';
     const ws=new WebSocket(wsUrl.toString());
     checkLiveWs=ws;
@@ -3175,7 +3330,7 @@ async function fcDoCheck(){
     if(!jobId) throw new Error('لم يُرجع job_id');
     const data=await pollTranscribeStatus(jobId);
     newRows=Array.isArray(data.plates)?data.plates:[];
-    fcShowStatus('proc','تم التفريغ — استُخرج '+newRows.length+' لوحة. جاري التشيك …',true);
+    fcShowStatus('proc','تم التسجيل — استُخرج '+newRows.length+' لوحة. جاري التشيك …',true);
   }catch(rawErr){
     fcShowStatus('err',friendlyError(rawErr.message));
     document.getElementById('fcCheckInline').disabled=false;
@@ -3193,7 +3348,7 @@ async function fcDoCheck(){
   document.getElementById('fcAllCount').textContent=fcAllRows.length+' لوحة';
 
   if(!fcRefFile){
-    fcShowStatus('ok','✔ تم التفريغ — '+newRows.length+' لوحة (لا يوجد ملف مرجعي للمطابقة)');
+    fcShowStatus('ok','✔ تم التسجيل — '+newRows.length+' لوحة (لا يوجد ملف مرجعي للمطابقة)');
     document.getElementById('fcResultSection').style.display='none';
     document.getElementById('fcCheckInline').disabled=false;
     fcResetRecUI();
@@ -3207,14 +3362,14 @@ async function fcDoCheck(){
     const d2=await res2.json();
     if(!res2.ok){
       const hint=d2.headers?'الأعمدة المتاحة: '+d2.headers.join(' | '):'';
-      fcShowStatus('warn','تم التفريغ لكن فشل قراءة ملف المرجع'+(hint?' — '+hint:''));
+      fcShowStatus('warn','تم التسجيل لكن فشل قراءة ملف المرجع'+(hint?' — '+hint:''));
       document.getElementById('fcCheckInline').disabled=false;
       fcResetRecUI();
       return;
     }
     fcRefPlates=Array.isArray(d2.plates)?d2.plates:[];
   }catch(e){
-    fcShowStatus('warn','تم التفريغ لكن فشل قراءة ملف المرجع: '+e.message);
+    fcShowStatus('warn','تم التسجيل لكن فشل قراءة ملف المرجع: '+e.message);
     document.getElementById('fcCheckInline').disabled=false;
     fcResetRecUI();
     return;
@@ -3232,7 +3387,7 @@ async function fcDoCheck(){
   document.getElementById('fcResultSection').style.display='';
 
   if(fcMatchedRows.length===0)
-    fcShowStatus('warn','تم التفريغ — لا توجد تطابقات في هذا التسجيل');
+    fcShowStatus('warn','تم التسجيل — لا توجد تطابقات في هذه الجلسة');
   else
     fcShowStatus('ok','✅ '+fcMatchedRows.length+' لوحة مطابقة من أصل '+newRows.length+' — إجمالي مسجّل: '+fcAllRows.length);
 
@@ -3446,9 +3601,7 @@ async function runPostLoginPermissions(){
       const s=await navigator.mediaDevices.getUserMedia({audio:true});
       s.getTracks().forEach(function(t){ t.stop(); });
       micOk=true;
-    }catch(e){
-      if(typeof addLog==='function') addLog('الميكروفون: '+friendlyError(e&&e.message),'warn');
-    }
+    }catch(e){}
   }
   if(navigator.geolocation){
     try{
@@ -3456,10 +3609,7 @@ async function runPostLoginPermissions(){
         navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:15000,maximumAge:0});
       });
       geoOk=true;
-    }catch(e){
-      const g=(e&&typeof e.code==='number')?geoErrorMessage(e):(e&&e.message)||'';
-      if(typeof addLog==='function') addLog('الموقع: '+(g||'مرفوض'),'warn');
-    }
+    }catch(e){}
   }
   const msg=(micOk?'✔ الميكروفون':'✖ الميكروفون')+' · '+(geoOk?'✔ الموقع':'✖ الموقع');
   if(typeof showStatus==='function') showStatus(micOk&&geoOk?'ok':'warn',msg);
@@ -3479,6 +3629,7 @@ function applyAdminNavVisibility(){
 <script>
 (function(){
   const ACCESS='access_token', REFRESH='refresh_token', DEVICE='device_id';
+  const AUTH_SESSION='auth_session_v1';
   const lock=document.getElementById('authLock');
   const wrap=document.querySelector('.wrap');
   const msg=document.getElementById('authMsg');
@@ -3489,17 +3640,19 @@ function applyAdminNavVisibility(){
     if(!d){ d='dev-'+(self.crypto&&crypto.randomUUID?crypto.randomUUID():String(Date.now())); localStorage.setItem(DEVICE,d); }
     return d;
   }
-  function getAccess(){ return localStorage.getItem(ACCESS)||''; }
-  function getRefresh(){ return localStorage.getItem(REFRESH)||''; }
-  function setTokens(a,r){ localStorage.setItem(ACCESS,a); localStorage.setItem(REFRESH,r); }
+  function hasSession(){ return localStorage.getItem(AUTH_SESSION)==='1'; }
+  function setSession(on){
+    if(on) localStorage.setItem(AUTH_SESSION,'1');
+    else localStorage.removeItem(AUTH_SESSION);
+  }
   function emitAuthStateChanged(authenticated){
     try{
       window.dispatchEvent(new CustomEvent('om-auth-state-changed',{detail:{authenticated:!!authenticated}}));
     }catch(_){}
   }
   function clearTokens(){
-    localStorage.removeItem(ACCESS);
-    localStorage.removeItem(REFRESH);
+    try{ localStorage.removeItem(AUTH_SESSION); }catch(_){}
+    try{ localStorage.removeItem(ACCESS); localStorage.removeItem(REFRESH); }catch(_){}
     try{ localStorage.removeItem('auth_is_admin'); }catch(_){}
     stopProactiveRefresh();
     if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
@@ -3510,7 +3663,7 @@ function applyAdminNavVisibility(){
   function stopProactiveRefresh(){ if(_proactiveTimer){clearInterval(_proactiveTimer);_proactiveTimer=null;} }
   function startProactiveRefresh(){
     stopProactiveRefresh();
-    if(!getRefresh()) return;
+    if(!hasSession()) return;
     _proactiveTimer=setInterval(function(){ refreshToken().catch(function(){}); }, TOKEN_REFRESH_MS);
   }
   function showLock(show){ lock.classList.toggle('show',show); if(wrap) wrap.style.display=show?'none':'block'; }
@@ -3518,21 +3671,36 @@ function applyAdminNavVisibility(){
 
   const _fetch=window.fetch.bind(window);
 
+  async function serverRevokeRefreshTokens(){
+    if(!hasSession()) return;
+    try{
+      await _fetch('/auth/logout',{
+        method:'POST',
+        credentials:'include',
+        headers:{'X-Device-Id':getDeviceId()}
+      });
+    }catch(_){}
+  }
+
   let _refreshInFlight=null;
   async function refreshToken(){
     if(_refreshInFlight) return _refreshInFlight;
     _refreshInFlight=(async function(){
       try{
-        const rt=getRefresh(); if(!rt) throw new Error('لا يوجد refresh token');
-        const r=await _fetch('/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json','X-Device-Id':getDeviceId()},body:JSON.stringify({refresh_token:rt})});
+        const r=await _fetch('/auth/refresh',{
+          method:'POST',
+          credentials:'include',
+          headers:{'Content-Type':'application/json','X-Device-Id':getDeviceId()},
+          body:'{}'
+        });
         const j=await r.json().catch(()=>({}));
         if(!r.ok) throw new Error(j.detail||'Refresh failed');
-        setTokens(j.access_token,j.refresh_token);
         if(typeof j.is_admin==='boolean') localStorage.setItem('auth_is_admin', j.is_admin?'1':'0');
+        setSession(true);
         if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
         startProactiveRefresh();
         emitAuthStateChanged(true);
-        return j.access_token;
+        return true;
       }finally{
         _refreshInFlight=null;
       }
@@ -3545,10 +3713,21 @@ function applyAdminNavVisibility(){
     try{
       if(urlStr.indexOf('http://')===0||urlStr.indexOf('https://')===0){
         const p=new URL(urlStr).pathname||'';
-        return p.indexOf('/api/')===0||p.indexOf('/admin/')===0||p==='/auth/me';
+        return p.indexOf('/api/')===0||p.indexOf('/admin/')===0||p==='/auth/me'||p==='/auth/logout';
       }
     }catch(e){}
-    return urlStr.indexOf('/api/')===0||urlStr.indexOf('/admin/')===0||urlStr==='/auth/me';
+    return urlStr.indexOf('/api/')===0||urlStr.indexOf('/admin/')===0||urlStr==='/auth/me'||urlStr==='/auth/logout';
+  }
+
+  function pathNeedsCredentials(urlStr){
+    if(!urlStr) return false;
+    try{
+      if(urlStr.indexOf('http://')===0||urlStr.indexOf('https://')===0){
+        const p=new URL(urlStr).pathname||'';
+        return p.indexOf('/auth/')===0||p.indexOf('/api/')===0||p.indexOf('/admin/')===0;
+      }
+    }catch(e){}
+    return urlStr.indexOf('/auth/')===0||urlStr.indexOf('/api/')===0||urlStr.indexOf('/admin/')===0;
   }
 
   function normalizeApiDetail(j){
@@ -3576,18 +3755,19 @@ function applyAdminNavVisibility(){
   }
   window.fetch=async function(input,init){
     const urlStr=(typeof input==='string')?input:(input&&input.url)||'';
+    init=init||{};
+    if(pathNeedsCredentials(urlStr) && !init.credentials) init.credentials='include';
     const needsAuth=pathNeedsAuth(urlStr);
     if(!needsAuth) return _fetch(input,init);
 
-    let token=getAccess();
-    if(!token){ showLock(true); throw new Error('يجب تسجيل الدخول أولاً'); }
+    if(!hasSession()){ showLock(true); throw new Error('يجب تسجيل الدخول أولاً'); }
 
-    init=init||{}; init.headers=new Headers(init.headers||{}); init.headers.set('Authorization','Bearer '+token);
+    init.headers=new Headers(init.headers||{});
+    if(!init.headers.get('X-Device-Id')) init.headers.set('X-Device-Id', getDeviceId());
     let res=await _fetch(input,init);
     if(res.status===401){
       try{
-        token=await refreshToken();
-        init.headers.set('Authorization','Bearer '+token);
+        await refreshToken();
         res=await _fetch(input,init);
       }catch(_){
         clearTokens(); showLock(true); throw new Error('انتهت الجلسة — سجل الدخول مرة أخرى');
@@ -3609,14 +3789,14 @@ function applyAdminNavVisibility(){
     const d=document.getElementById('authDeviceId').value.trim()||getDeviceId();
     localStorage.setItem(DEVICE,d);
     try{
-      const r=await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json','X-Device-Id':d},body:JSON.stringify({username:u,password:p})});
+      const r=await fetch('/auth/login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-Device-Id':d},body:JSON.stringify({username:u,password:p})});
       const j=await r.json().catch(()=>({}));
       if(!r.ok){
         const detailRaw=normalizeApiDetail(j);
         setMsg(loginErrorToMessage(r.status,detailRaw),false);
         return;
       }
-      setTokens(j.access_token,j.refresh_token);
+      setSession(true);
       localStorage.setItem('auth_is_admin', j.is_admin===true?'1':'0');
       if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
       startProactiveRefresh();
@@ -3628,15 +3808,17 @@ function applyAdminNavVisibility(){
     }catch(e){ setMsg('تعذر الاتصال بالخادم — تحقق من الشبكة.',false); }
   };
 
-  window.authLogout=function(){
+  window.authLogout=async function(){
+    await serverRevokeRefreshTokens();
     clearTokens();
     showLock(true);
     setMsg('تم تسجيل الخروج',true);
     if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
   };
 
-  window.authFullLogout=function(){
+  window.authFullLogout=async function(){
     try{ const sm=document.getElementById('settingsModal'); if(sm) sm.classList.remove('open'); }catch(_){}
+    await serverRevokeRefreshTokens();
     clearTokens();
     showLock(true);
     setMsg('تم تسجيل الخروج',true);
@@ -3968,7 +4150,7 @@ function applyAdminNavVisibility(){
   };
 
   async function syncAuthProfile(){
-    if(!getAccess()) return;
+    if(!hasSession()) return;
     try{
       const r=await fetch('/auth/me');
       const j=await r.json().catch(()=>({}));
@@ -3981,19 +4163,46 @@ function applyAdminNavVisibility(){
   }
 
   devInput.value=getDeviceId();
-  showLock(!getAccess());
+  async function probeAuth(){
+    try{
+      let r=await _fetch('/auth/me',{credentials:'include'});
+      if(r.status===401){
+        try{
+          await refreshToken();
+          r=await _fetch('/auth/me',{credentials:'include'});
+        }catch(_){}
+      }
+      const j=await r.json().catch(function(){ return {}; });
+      if(r.ok){
+        setSession(true);
+        if(typeof j.is_admin==='boolean') localStorage.setItem('auth_is_admin', j.is_admin?'1':'0');
+        if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
+        showLock(false);
+        startProactiveRefresh();
+        await syncAuthProfile();
+        try{
+          if(typeof omFetchCheckCapabilities==='function') await omFetchCheckCapabilities();
+        }catch(_){}
+      }else{
+        clearTokens();
+        showLock(true);
+        if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
+      }
+    }catch(_e){
+      clearTokens();
+      showLock(true);
+      if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
+    }
+  }
+  probeAuth();
   let _lastVisRefresh=0;
   document.addEventListener('visibilitychange',function(){
-    if(document.visibilityState!=='visible'||!getRefresh()) return;
+    if(document.visibilityState!=='visible'||!hasSession()) return;
     const t=Date.now();
     if(t-_lastVisRefresh<120000) return;
     _lastVisRefresh=t;
     refreshToken().catch(function(){});
   });
-  if(getAccess()){
-    startProactiveRefresh();
-    syncAuthProfile();
-  }else if(typeof applyAdminNavVisibility==='function') applyAdminNavVisibility();
 })();
 </script>
 

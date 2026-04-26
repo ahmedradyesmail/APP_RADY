@@ -1,7 +1,6 @@
 """Excel parsing and plate index for Live WebSocket checker."""
 from __future__ import annotations
 
-import base64
 import re
 from typing import Any
 
@@ -26,8 +25,11 @@ def plate_candidates_from_text(text: str) -> list[str]:
     return out
 
 
-def parse_excel_workbook(b64_data: str, password: str = "") -> tuple[dict[str, tuple], list[str]]:
-    raw = base64.b64decode(b64_data)
+def parse_excel_workbook_from_path(
+    file_path: str, password: str = ""
+) -> tuple[dict[str, tuple], list[str]]:
+    with open(file_path, "rb") as fh:
+        raw = fh.read()
     wb = load_workbook_maybe_encrypted(raw, (password or "").strip())
     try:
         sheets_map: dict[str, tuple] = {}

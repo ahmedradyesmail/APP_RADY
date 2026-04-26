@@ -5,7 +5,8 @@ from sqlalchemy.orm import sessionmaker
 
 from core.plate_checker_ws import handle_plate_checker_client
 from db import engine
-from dependencies.ws_auth import get_user_from_access_token
+from models import User
+from services.ws_check_live_ticket import consume_ticket
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +18,18 @@ router = APIRouter(tags=["check-live"])
 @router.websocket("/ws/check-live")
 async def check_live_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
-    token = (websocket.query_params.get("token") or "").strip()
-    if not token:
-        await websocket.close(code=4401, reason="missing token")
+    ticket = (websocket.query_params.get("ticket") or "").strip()
+    if not ticket:
+        await websocket.close(code=4401, reason="missing ticket")
+        return
+    user_id = consume_ticket(ticket)
+    if user_id is None:
+        await websocket.close(code=4401, reason="invalid or used ticket")
         return
     with SessionLocal() as db:
-        user = get_user_from_access_token(token, db)
-    if user is None:
-        await websocket.close(code=4401, reason="invalid token")
+        user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        await websocket.close(code=4401, reason="invalid ticket")
         return
     try:
         await handle_plate_checker_client(websocket, user.id, bool(user.is_admin))

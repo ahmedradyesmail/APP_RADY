@@ -28,12 +28,12 @@
 </head>
 <body>
   <h1>استيراد الفرز (Postgres) — إدارة</h1>
-  <p style="font-size:.8rem;color:#94a3b8;margin:0 0 .75rem">يتطلب تسجيل دخول كـ Admin. استخدم نفس الجلسة من التطبيق الرئيسي أو الصق <code>access_token</code> أدناه.</p>
+  <p style="font-size:.8rem;color:#94a3b8;margin:0 0 .75rem">يتطلب تسجيل دخول كـ Admin. من نفس الموقع بعد الدخول في التطبيق تُرسل الكوكيز المؤمنة تلقائياً. أو الصق <code>access_token</code> يدوياً للاختبار.</p>
   <div class="toolbar">
     <button type="button" id="loadBtn">تحديث الملخص</button>
     <button type="button" id="loadImportsBtn" class="secondary">تحديث قائمة الاستيرادات</button>
-    <label style="font-size:.78rem;color:#94a3b8">أو Bearer يدوي:
-      <input id="tokIn" type="password" placeholder="access_token" style="width:min(380px,88vw);padding:.35rem .5rem;border-radius:4px;border:1px solid #475569;background:#1e293b;color:#e2e8f0"/>
+    <label style="font-size:.78rem;color:#94a3b8">Bearer يدوي (اختياري):
+      <input id="tokIn" type="password" placeholder="JWT access (اختياري)" style="width:min(380px,88vw);padding:.35rem .5rem;border-radius:4px;border:1px solid #475569;background:#1e293b;color:#e2e8f0"/>
     </label>
   </div>
   <div id="msg"></div>
@@ -79,29 +79,34 @@
 
   <p style="margin-top:1.2rem;font-size:.75rem;color:#64748b"><a href="/">← الرئيسية</a></p>
   <script>
-  function token(){
-    var m=document.getElementById('tokIn').value.trim();
-    if(m) return m;
-    try{ return localStorage.getItem('access_token')||''; }catch(e){ return ''; }
+  function manualToken(){
+    return document.getElementById('tokIn').value.trim();
   }
   function authHeaders(){
-    return {'Authorization':'Bearer '+token()};
+    var t=manualToken();
+    if(!t) return {};
+    return {'Authorization':'Bearer '+t};
+  }
+  function credFetch(url, opts){
+    opts=opts||{};
+    opts.credentials='include';
+    var base=authHeaders();
+    opts.headers=Object.assign({}, base, opts.headers||{});
+    return fetch(url, opts);
   }
 
   async function load(){
     var msg=document.getElementById('msg');
     var tb=document.getElementById('tbody');
     var btn=document.getElementById('loadBtn');
-    var t=token();
-    if(!t){ msg.className='err'; msg.textContent='لا يوجد token — سجّل الدخول من الصفحة الرئيسية أو الصق access_token.'; return; }
     btn.disabled=true;
     msg.textContent='جاري تحميل الملخص…';
     msg.className='';
     tb.innerHTML='';
     try{
-      var r=await fetch('/api/admin/check-storage/summary',{headers:authHeaders()});
+      var r=await credFetch('/api/admin/check-storage/summary');
       var j=await r.json().catch(function(){return{};});
-      if(!r.ok) throw new Error(j.detail||r.statusText||'فشل');
+      if(!r.ok) throw new Error(r.status===401?'غير مصرّح — سجّل دخول Admin من الرئيسية أو الصق token.':(j.detail||r.statusText||'فشل'));
       var items=(j.items)||[];
       if(!items.length){
         msg.className='ok';
@@ -127,14 +132,12 @@
     var msg=document.getElementById('msg');
     var tb=document.getElementById('importsBody');
     var btn=document.getElementById('loadImportsBtn');
-    var t=token();
-    if(!t){ msg.className='err'; msg.textContent='لا يوجد token.'; return; }
     btn.disabled=true;
     msg.textContent='جاري تحميل الاستيرادات…';
     msg.className='';
     tb.innerHTML='';
     try{
-      var r=await fetch('/api/admin/check-storage/imports',{headers:authHeaders()});
+      var r=await credFetch('/api/admin/check-storage/imports');
       var j=await r.json().catch(function(){return{}});
       if(!r.ok) throw new Error(j.detail||r.statusText||'فشل');
       var items=(j.items)||[];
@@ -179,11 +182,9 @@
     var metaEl=document.getElementById('previewMeta');
     var head=document.getElementById('previewHead');
     var body=document.getElementById('previewBody');
-    var t=token();
-    if(!t){ msg.className='err'; msg.textContent='لا يوجد token.'; return; }
     msg.textContent='جاري تحميل المعاينة…';
     try{
-      var r=await fetch('/api/admin/check-storage/import/'+importId+'/rows?offset=0&limit=50',{headers:authHeaders()});
+      var r=await credFetch('/api/admin/check-storage/import/'+importId+'/rows?offset=0&limit=50');
       var j=await r.json().catch(function(){return{}});
       if(!r.ok) throw new Error(j.detail||r.statusText||'فشل');
       pid.textContent=String(importId);
@@ -224,12 +225,10 @@
 
   async function downloadCsv(importId){
     var msg=document.getElementById('msg');
-    var t=token();
-    if(!t){ msg.className='err'; msg.textContent='لا يوجد token.'; return; }
     msg.textContent='جاري تجهيز الملف…';
     msg.className='';
     try{
-      var r=await fetch('/api/admin/check-storage/import/'+importId+'/export.csv',{headers:authHeaders()});
+      var r=await credFetch('/api/admin/check-storage/import/'+importId+'/export.csv');
       if(!r.ok){
         var j=await r.json().catch(function(){return{}});
         throw new Error(j.detail||r.statusText||'فشل التصدير');

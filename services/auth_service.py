@@ -49,6 +49,9 @@ def login(
         elif user.device_id != device_id:
             raise AuthServiceError(status_code=403, detail="This account is linked to another device")
 
+    # New login replaces prior refresh rows for this device (avoids UNIQUE(token_hash) on duplicate JWT).
+    revoke_user_device_tokens(db=db, user_id=user.id, device_id=device_id)
+
     subject = str(user.id)
     # SECURITY FIX: refresh token rotation with DB validation.
     refresh_token = create_refresh_token(subject)

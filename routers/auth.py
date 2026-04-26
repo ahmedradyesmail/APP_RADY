@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
 
+from config import settings
 from db import get_db
 from dependencies.auth import get_current_user, require_device_header
 from models import User
-from schemas.auth import LoginRequest, MeOut, RefreshRequest, TokenResponse
+from schemas.auth import AuthSessionOut, LoginRequest, MeOut
+from services.auth_cookies import clear_auth_cookies, set_auth_cookies
 from services.auth_service import (
     AuthServiceError,
     login as auth_login,
@@ -38,7 +41,7 @@ async def me(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=AuthSessionOut)
 # SECURITY FIX: rate limited to prevent brute-force
 @limiter.limit("5/minute")
 async def login(
@@ -57,37 +60,53 @@ async def login(
     except AuthServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
-    return TokenResponse(access_token=access_token, refresh_token=refresh_token, is_admin=is_admin)
+    body = AuthSessionOut(is_admin=is_admin).model_dump()
+    resp = JSONResponse(content=body)
+    set_auth_cookies(resp, access_token, refresh_token)
+    return resp
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=AuthSessionOut)
 # SECURITY FIX: rate limited to prevent brute-force
 @limiter.limit("10/minute")
 async def refresh_token(
     request: Request,
-    payload: RefreshRequest,
     x_device_id: str = Depends(require_device_header),
     db: Session = Depends(get_db),
 ):
+    rt = ""
+    try:
+        body = await request.json()
+        if isinstance(body, dict) and body.get("refresh_token"):
+            rt = str(body["refresh_token"]).strip()
+    except Exception:
+        pass
+    if not rt:
+        rt = (request.cookies.get(settings.auth_cookie_refresh_name) or "").strip()
+    if not rt:
+        raise HTTPException(status_code=401, detail="Missing refresh token")
     try:
         access_token, refresh_token, is_admin = auth_refresh(
             db=db,
-            refresh_token=payload.refresh_token,
+            refresh_token=rt,
             device_id=x_device_id,
         )
     except AuthServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
-    return TokenResponse(access_token=access_token, refresh_token=refresh_token, is_admin=is_admin)
+    body = AuthSessionOut(is_admin=is_admin).model_dump()
+    resp = JSONResponse(content=body)
+    set_auth_cookies(resp, access_token, refresh_token)
+    return resp
 
 
 @router.post("/logout")
 async def logout(
-    _request: Request,
     current: User = Depends(get_current_user),
     x_device_id: str = Depends(require_device_header),
     db: Session = Depends(get_db),
 ):
-    # SECURITY FIX: refresh token rotation with DB validation.
     revoke_user_device_tokens(db=db, user_id=current.id, device_id=x_device_id)
-    return {"detail": "Logged out successfully"}
+    resp = JSONResponse(content={"detail": "Logged out successfully"})
+    clear_auth_cookies(resp)
+    return resp

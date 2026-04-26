@@ -9,6 +9,26 @@ PLATE_COL_PATTERNS = [
 _AR_HARAKAT_TATWEEL = re.compile(r"[\u0640\u064B-\u065F\u0670]")
 _SPACE_ZW = re.compile(r"[\s\u200b\u200c\u200d\ufeff]+")
 _SEPARATORS = re.compile(r"[\s\u200b\u200c\u200d\ufeff\-._/]+")
+_SAUDI_LATIN_TO_ARABIC = {
+    "A": "ا",
+    "B": "ب",
+    "J": "ح",
+    "D": "د",
+    "R": "ر",
+    "Z": "ز",
+    "S": "س",
+    "X": "ص",
+    "T": "ط",
+    "E": "ع",
+    "G": "ق",
+    "K": "ك",
+    "L": "ل",
+    "M": "م",
+    "N": "ن",
+    "H": "ه",
+    "U": "و",
+    "V": "ى",
+}
 
 
 def _digits_western_from_chars(s: str) -> str:
@@ -25,6 +45,8 @@ def _digits_western_from_chars(s: str) -> str:
 
 def _normalize_plate_letters_segment(letters: str) -> str:
     letters = re.sub(r"[^A-Za-z\u0600-\u06FF]+", "", str(letters or ""))
+    # Map Saudi plate Latin letters to Arabic before normalization.
+    letters = "".join(_SAUDI_LATIN_TO_ARABIC.get(ch.upper(), ch) for ch in letters)
     letters = _AR_HARAKAT_TATWEEL.sub("", letters)
     letters = re.sub(r"[أإآٱ]", "ا", letters)
     letters = letters.replace("\u0649", "\u064a")
@@ -163,4 +185,39 @@ def auto_detect_plate_col_from_row3(headers: list[str], row3: tuple | list | Non
         v = vals[i] if i < len(vals) else None
         if _looks_like_plate_text("" if v is None else str(v)):
             return str(h).strip()
+    return None
+
+
+def auto_detect_plate_col_from_rows(
+    headers: list[str], rows: list[tuple | list] | None, *, min_hits: int = 2
+) -> str | None:
+    """
+    Fallback detection using a small sample of data rows.
+    Expects up to 5 rows (for speed). Returns first strongest candidate.
+    """
+    if not headers or not rows:
+        return None
+    best_col: str | None = None
+    best_hits = 0
+    for i, h in enumerate(headers):
+        if not h:
+            continue
+        hits = 0
+        seen = 0
+        for row in rows:
+            vals = list(row or [])
+            v = vals[i] if i < len(vals) else None
+            if v is None:
+                continue
+            sv = str(v).strip()
+            if not sv:
+                continue
+            seen += 1
+            if _looks_like_plate_text(sv):
+                hits += 1
+        if seen and hits > best_hits:
+            best_hits = hits
+            best_col = str(h).strip()
+    if best_col and best_hits >= max(1, int(min_hits)):
+        return best_col
     return None

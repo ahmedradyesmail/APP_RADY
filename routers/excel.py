@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import logging
+import os
 from datetime import datetime
 
 import openpyxl
@@ -12,7 +13,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from dependencies.auth import get_current_user
 from services.plate_utils import normalize_plate_value
 from services.excel_utils import apply_excel_style, workbook_to_bytes_async
-from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
+from services.upload_security import MAX_EXCEL_BYTES, save_upload_to_temp_with_limit
 from urllib.parse import quote
 
 
@@ -36,6 +37,19 @@ _EXPORT_HEADERS = [
     "موقع الشارع",
 ]
 _COL_WIDTHS = [22, 26, 18, 18, 22, 40, 14, 20, 26]
+_EXPORT_HEADERS_SET = {h.strip() for h in _EXPORT_HEADERS}
+
+# جدول جلسة التشيك (صفحة التشيك فقط): بدون نوع السيارة وموقع الشارع وملاحظات
+_CHECK_SESSION_EXPORT_HEADERS = [
+    "رقم اللوحة",
+    "GPS",
+    "تاريخ التسجيل",
+    "الحي",
+    "الشارع",
+    "اسم المسجّل",
+]
+_CHECK_SESSION_COL_WIDTHS = [22, 26, 18, 18, 22, 20]
+_CHECK_SESSION_EXPORT_HEADERS_SET = {h.strip() for h in _CHECK_SESSION_EXPORT_HEADERS}
 
 
 def _clean_sheet_name(name: str) -> str:
@@ -68,6 +82,113 @@ def _row_street_location(r: dict) -> str:
     if s:
         return s
     return _mid_gps_value([r])
+
+
+def _open_workbook_readonly(source: bytes | str):
+    if isinstance(source, (str, os.PathLike)):
+        return openpyxl.load_workbook(str(source), read_only=True, data_only=True)
+    return openpyxl.load_workbook(io.BytesIO(source), read_only=True, data_only=True)
+
+
+def _parse_append_excel_sync(source: bytes | str) -> tuple[list[dict], int]:
+    """
+    Parse append-only export file with strict headers.
+    Accepts only the canonical export headers (no missing/extra columns).
+    """
+    wb = _open_workbook_readonly(source)
+    try:
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        header_row = next(rows_iter, None)
+        if header_row is None:
+            raise ValueError("الملف فارغ")
+        headers = [str(c).strip() if c is not None else "" for c in header_row]
+        headers_no_empty = [h for h in headers if h]
+        if len(headers_no_empty) != len(_EXPORT_HEADERS_SET) or set(headers_no_empty) != _EXPORT_HEADERS_SET:
+            raise ValueError(
+                "أعمدة الملف غير مطابقة. المطلوب فقط: "
+                + "، ".join(_EXPORT_HEADERS)
+            )
+        idx = {h: headers.index(h) for h in _EXPORT_HEADERS}
+        out: list[dict] = []
+        for row in rows_iter:
+            if row is None or all(v is None for v in row):
+                continue
+
+            def cell(name: str) -> str:
+                ci = idx[name]
+                if ci >= len(row) or row[ci] is None:
+                    return ""
+                return str(row[ci]).strip()
+
+            out.append(
+                {
+                    "full_plate": cell("رقم اللوحة"),
+                    "gps": cell("GPS"),
+                    "recording_date": cell("تاريخ التسجيل"),
+                    "district_name": cell("الحي"),
+                    "street_name": cell("الشارع"),
+                    "location_details": cell("ملاحظات"),
+                    "vehicle_type": cell("نوع السيارة"),
+                    "recorder_name": cell("اسم المسجّل"),
+                    "street_location": cell("موقع الشارع"),
+                }
+            )
+        return out, len(out)
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+
+
+def _parse_check_session_append_sync(source: bytes | str) -> tuple[list[dict], int]:
+    """Parse append file for check-session export (6 columns)."""
+    wb = _open_workbook_readonly(source)
+    try:
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        header_row = next(rows_iter, None)
+        if header_row is None:
+            raise ValueError("الملف فارغ")
+        headers = [str(c).strip() if c is not None else "" for c in header_row]
+        headers_no_empty = [h for h in headers if h]
+        if (
+            len(headers_no_empty) != len(_CHECK_SESSION_EXPORT_HEADERS_SET)
+            or set(headers_no_empty) != _CHECK_SESSION_EXPORT_HEADERS_SET
+        ):
+            raise ValueError(
+                "أعمدة الملف غير مطابقة. المطلوب فقط: "
+                + "، ".join(_CHECK_SESSION_EXPORT_HEADERS)
+            )
+        idx = {h: headers.index(h) for h in _CHECK_SESSION_EXPORT_HEADERS}
+        out: list[dict] = []
+        for row in rows_iter:
+            if row is None or all(v is None for v in row):
+                continue
+
+            def cell(name: str) -> str:
+                ci = idx[name]
+                if ci >= len(row) or row[ci] is None:
+                    return ""
+                return str(row[ci]).strip()
+
+            out.append(
+                {
+                    "full_plate": cell("رقم اللوحة"),
+                    "gps": cell("GPS"),
+                    "recording_date": cell("تاريخ التسجيل"),
+                    "district_name": cell("الحي"),
+                    "street_name": cell("الشارع"),
+                    "recorder_name": cell("اسم المسجّل"),
+                }
+            )
+        return out, len(out)
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
 
 
 @router.post("/export-excel")
@@ -145,6 +266,84 @@ async def export_excel(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
         headers={"Content-Disposition": _content_disposition(filename, "tafreegh.xlsx")},
+    )
+
+
+@router.post("/export-check-session")
+async def export_check_session(
+    rows_json: str = Form("[]"),
+    sheet_name: str = Form("بيانات مركبات الجلسة"),
+):
+    """Excel for check page session table only — 6 columns (no نوع السيارة / موقع الشارع / ملاحظات)."""
+    sheet_name = _clean_sheet_name(sheet_name.strip() or "بيانات مركبات الجلسة")
+
+    try:
+        rows = json.loads(rows_json)
+    except Exception:
+        raise HTTPException(status_code=400, detail="تنسيق JSON خاطئ")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+    ws.sheet_view.rightToLeft = True
+
+    hf = Font(name="Arial", bold=True, color="FFFFFF", size=12)
+    hfill = PatternFill("solid", start_color="1F4E79")
+    ha = Alignment(horizontal="center", vertical="center")
+    ca = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    df = Font(name="Arial", size=11)
+    pf = Font(name="Arial", size=11, bold=True)
+    thin = Side(style="thin", color="BFBFBF")
+    brd = Border(left=thin, right=thin, top=thin, bottom=thin)
+    fe = PatternFill("solid", start_color="D6E4F0")
+    fo = PatternFill("solid", start_color="FFFFFF")
+
+    for col, h in enumerate(_CHECK_SESSION_EXPORT_HEADERS, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = hf
+        cell.fill = hfill
+        cell.alignment = ha
+        cell.border = brd
+    ws.row_dimensions[1].height = 30
+
+    valid_rows: list[dict] = []
+    for r in rows:
+        normalized, ok = normalize_plate_value(full_raw=r.get("full_plate", ""))
+        if not ok:
+            continue
+        rr = dict(r)
+        rr["full_plate"] = normalized
+        valid_rows.append(rr)
+
+    for i, r in enumerate(valid_rows, 1):
+        fill = fe if i % 2 == 0 else fo
+        vals = [
+            r.get("full_plate", ""),
+            r.get("gps", ""),
+            r.get("recording_date", ""),
+            r.get("district_name", ""),
+            r.get("street_name", "غير محدد"),
+            r.get("recorder_name", ""),
+        ]
+        for col, v in enumerate(vals, 1):
+            cell = ws.cell(row=i + 1, column=col, value=v)
+            cell.font = pf if col == 1 else df
+            cell.alignment = ca
+            cell.border = brd
+            cell.fill = fill
+
+    for col, w in zip("ABCDEF", _CHECK_SESSION_COL_WIDTHS):
+        ws.column_dimensions[col].width = w
+
+    content = await workbook_to_bytes_async(wb)
+    filename = f"تشيك_جلسة_{sheet_name}.xlsx"
+
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={"Content-Disposition": _content_disposition(filename, "check_session.xlsx")},
     )
 
 
@@ -239,10 +438,8 @@ async def export_field_check(
     )
 
 
-def _parse_excel_sync(content: bytes) -> tuple[list[dict], int]:
-    wb = openpyxl.load_workbook(
-        io.BytesIO(content), read_only=True, data_only=True
-    )
+def _parse_excel_sync(source: bytes | str) -> tuple[list[dict], int]:
+    wb = _open_workbook_readonly(source)
     ws = wb.active
     rows_out: list[dict] = []
     headers: list[str] = []
@@ -334,10 +531,16 @@ async def parse_excel(file: UploadFile = File(...)):
     if not file:
         raise HTTPException(status_code=400, detail="لم يتم رفع ملف")
 
+    tmp_path = None
     try:
-        # SECURITY FIX: file size limit to prevent DoS via large uploads
-        content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
-        rows_out, total = await asyncio.to_thread(_parse_excel_sync, content)
+        tmp_path = await save_upload_to_temp_with_limit(
+            file,
+            max_bytes=MAX_EXCEL_BYTES,
+            max_mb=30,
+            prefix="excel_parse_",
+            suffix=".xlsx",
+        )
+        rows_out, total = await asyncio.to_thread(_parse_excel_sync, tmp_path)
 
         return JSONResponse({"rows": rows_out, "total": total})
 
@@ -348,3 +551,76 @@ async def parse_excel(file: UploadFile = File(...)):
             status_code=500,
             detail="An internal error occurred. Please try again.",
         )
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+@router.post("/parse-export-append")
+async def parse_export_append(file: UploadFile = File(...)):
+    if not file:
+        raise HTTPException(status_code=400, detail="لم يتم رفع ملف")
+    tmp_path = None
+    try:
+        tmp_path = await save_upload_to_temp_with_limit(
+            file,
+            max_bytes=MAX_EXCEL_BYTES,
+            max_mb=30,
+            prefix="excel_parse_append_",
+            suffix=".xlsx",
+        )
+        rows_out, total = await asyncio.to_thread(_parse_append_excel_sync, tmp_path)
+        return JSONResponse({"rows": rows_out, "total": total})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed parsing append export excel")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred. Please try again.",
+        )
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+@router.post("/parse-check-session-append")
+async def parse_check_session_append(file: UploadFile = File(...)):
+    """Append file for check session: 6 columns (matches export-check-session)."""
+    if not file:
+        raise HTTPException(status_code=400, detail="لم يتم رفع ملف")
+    tmp_path = None
+    try:
+        tmp_path = await save_upload_to_temp_with_limit(
+            file,
+            max_bytes=MAX_EXCEL_BYTES,
+            max_mb=30,
+            prefix="excel_parse_check_session_",
+            suffix=".xlsx",
+        )
+        rows_out, total = await asyncio.to_thread(_parse_check_session_append_sync, tmp_path)
+        return JSONResponse({"rows": rows_out, "total": total})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed parsing check-session append excel")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred. Please try again.",
+        )
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass

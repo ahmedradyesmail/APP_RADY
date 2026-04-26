@@ -6,7 +6,7 @@ from pathlib import Path
 import aiofiles
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
@@ -18,6 +18,8 @@ from routers.audio import router as audio_router
 from routers.excel import router as excel_router
 from routers.check import router as check_router
 from routers.check_live_ws import router as check_live_ws_router
+from routers.check_live_ticket import router as check_live_ticket_router
+from routers.check_live_upload import router as check_live_upload_router
 from routers.gps import router as gps_router
 from routers.admin import router as admin_router
 from routers.admin_check_storage import router as admin_check_storage_router
@@ -69,6 +71,20 @@ def _validate_sensitive_settings() -> None:
 
 # SECURITY FIX: execute sensitive configuration validation at startup import time.
 _validate_sensitive_settings()
+
+
+def _validate_redis_for_multiworker() -> None:
+    """WS one-time tickets and SlowAPI limits are per-process unless Redis is shared."""
+    n = settings.effective_app_worker_count
+    if n > 1 and not settings.redis_configured:
+        raise RuntimeError(
+            f"REDIS_URL is required when running {n} app workers: WebSocket tickets and rate limits "
+            "must be shared across processes. Set REDIS_URL, or run a single worker (APP_WORKER_COUNT=1). "
+            "If Gunicorn does not expose worker count to the app, set APP_WORKER_COUNT explicitly."
+        )
+
+
+_validate_redis_for_multiworker()
 
 
 def bootstrap_admin(db: Session) -> None:
@@ -144,6 +160,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -156,6 +173,8 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.include_router(audio_router)
 app.include_router(excel_router)
 app.include_router(check_router)
+app.include_router(check_live_ticket_router)
+app.include_router(check_live_upload_router)
 app.include_router(check_live_ws_router)
 app.include_router(gps_router)
 
@@ -215,22 +234,10 @@ async def index():
     return HTMLResponse("<h1>index.html not found in static/</h1>", status_code=404)
 
 
-@app.get("/lame.min.js", include_in_schema=False)
-async def lame_js():
-    lame_file = static_path / "lame.min.js"
-    if lame_file.exists():
-        return FileResponse(
-            str(lame_file),
-            media_type="application/javascript",
-            headers={"Cache-Control": "public, max-age=604800"},
-        )
-    return HTMLResponse("lame.min.js not found", status_code=404)
-
-
 if __name__ == "__main__":
     import uvicorn
 
-    print(f"🚗  التفريغ — Server running → http://localhost:{settings.port}")
+    print(f"🚗  التسجيل — Server running → http://localhost:{settings.port}")
     print(f"     Docs: http://localhost:{settings.port}/docs")
     uvicorn.run(
         "main:app",

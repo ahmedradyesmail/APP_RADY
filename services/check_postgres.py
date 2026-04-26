@@ -429,44 +429,66 @@ def _ensure_peer_group_mirror_and_rls(conn) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_cmug_group ON check_mirror_user_groups (group_id)"
     )
-    conn.execute("DROP POLICY IF EXISTS check_large_rows_isolation ON check_large_rows")
-    conn.execute("DROP POLICY IF EXISTS check_large_imports_isolation ON check_large_imports")
     conn.execute(
         """
-        CREATE POLICY check_large_rows_isolation ON check_large_rows FOR ALL
-        USING (
-          COALESCE(current_setting('app.is_admin', true), '') = 'true'
-          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-          OR EXISTS (
-            SELECT 1 FROM check_mirror_user_groups m1
-            INNER JOIN check_mirror_user_groups m2 ON m1.group_id = m2.group_id
-            WHERE m1.user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-              AND m2.user_id = check_large_rows.user_id
-          )
-        )
-        WITH CHECK (
-          COALESCE(current_setting('app.is_admin', true), '') = 'true'
-          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-        )
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_policies
+            WHERE schemaname = 'public'
+              AND tablename = 'check_large_rows'
+              AND policyname = 'check_large_rows_isolation'
+          ) THEN
+            CREATE POLICY check_large_rows_isolation ON check_large_rows FOR ALL
+            USING (
+              COALESCE(current_setting('app.is_admin', true), '') = 'true'
+              OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+              OR EXISTS (
+                SELECT 1 FROM check_mirror_user_groups m1
+                INNER JOIN check_mirror_user_groups m2 ON m1.group_id = m2.group_id
+                WHERE m1.user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+                  AND m2.user_id = check_large_rows.user_id
+              )
+            )
+            WITH CHECK (
+              COALESCE(current_setting('app.is_admin', true), '') = 'true'
+              OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+            );
+          END IF;
+        END
+        $$;
         """
     )
     conn.execute(
         """
-        CREATE POLICY check_large_imports_isolation ON check_large_imports FOR ALL
-        USING (
-          COALESCE(current_setting('app.is_admin', true), '') = 'true'
-          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-          OR EXISTS (
-            SELECT 1 FROM check_mirror_user_groups m1
-            INNER JOIN check_mirror_user_groups m2 ON m1.group_id = m2.group_id
-            WHERE m1.user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-              AND m2.user_id = check_large_imports.user_id
-          )
-        )
-        WITH CHECK (
-          COALESCE(current_setting('app.is_admin', true), '') = 'true'
-          OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
-        )
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_policies
+            WHERE schemaname = 'public'
+              AND tablename = 'check_large_imports'
+              AND policyname = 'check_large_imports_isolation'
+          ) THEN
+            CREATE POLICY check_large_imports_isolation ON check_large_imports FOR ALL
+            USING (
+              COALESCE(current_setting('app.is_admin', true), '') = 'true'
+              OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+              OR EXISTS (
+                SELECT 1 FROM check_mirror_user_groups m1
+                INNER JOIN check_mirror_user_groups m2 ON m1.group_id = m2.group_id
+                WHERE m1.user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+                  AND m2.user_id = check_large_imports.user_id
+              )
+            )
+            WITH CHECK (
+              COALESCE(current_setting('app.is_admin', true), '') = 'true'
+              OR user_id = (NULLIF(current_setting('app.user_id', true), ''))::integer
+            );
+          END IF;
+        END
+        $$;
         """
     )
 

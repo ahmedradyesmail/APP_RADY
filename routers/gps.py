@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import os
 from datetime import datetime
 
 import openpyxl
@@ -18,11 +19,11 @@ from services.plate_utils import (
 from services.excel_utils import (
     apply_excel_style,
     find_best_sheet_async,
-    load_workbook_from_bytes_async,
-    load_workbook_maybe_encrypted_async,
+    load_workbook_from_path_async,
+    load_workbook_maybe_encrypted_from_path_async,
     workbook_to_bytes_async,
 )
-from services.upload_security import MAX_EXCEL_BYTES, read_upload_with_limit
+from services.upload_security import MAX_EXCEL_BYTES, save_upload_to_temp_with_limit
 
 
 logger = logging.getLogger(__name__)
@@ -48,10 +49,15 @@ async def parse_gps_excel(
     gps_col:   str        = Form("GPS"),
     label_cols_json: str  = Form(""),
 ):
-    # SECURITY FIX: file size limit to prevent DoS via large uploads
-    content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
+    tmp_path = await save_upload_to_temp_with_limit(
+        file,
+        max_bytes=MAX_EXCEL_BYTES,
+        max_mb=30,
+        prefix="gps_parse_",
+        suffix=".xlsx",
+    )
     try:
-        wb = await load_workbook_from_bytes_async(content)
+        wb = await load_workbook_from_path_async(tmp_path)
         ws = wb.active
         rows = list(ws.iter_rows(values_only=True))
 
@@ -153,6 +159,11 @@ async def parse_gps_excel(
             status_code=500,
             detail="An internal error occurred. Please try again.",
         )
+    finally:
+        try:
+            await asyncio.to_thread(os.unlink, tmp_path)
+        except OSError:
+            pass
 
 
 @router.post("/check-gps-data")
@@ -165,136 +176,171 @@ async def check_gps_data(
     large_sheet: str        = Form(""),
     small_sheet: str        = Form(""),
 ):
-    # SECURITY FIX: file size limit to prevent DoS via large uploads
-    lc_bytes = await read_upload_with_limit(large_file, MAX_EXCEL_BYTES, 30)
-    # SECURITY FIX: file size limit to prevent DoS via large uploads
-    sc_bytes = await read_upload_with_limit(small_file, MAX_EXCEL_BYTES, 30)
-
-    try:
-        large_wb = await load_workbook_maybe_encrypted_async(lc_bytes, password.strip())
-    except ValueError:
-        # SECURITY FIX: hiding internal exception details from client
-        logger.exception("Failed to open encrypted large workbook in GPS check")
-        raise HTTPException(
-            status_code=400,
-            detail="An internal error occurred. Please try again.",
-        )
-
-    try:
-        small_wb = await load_workbook_from_bytes_async(sc_bytes)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"تعذّر فتح الملف الصغير: {e}")
-
-    large_ws = (
-        large_wb[large_sheet]
-        if large_sheet and large_sheet in large_wb.sheetnames
-        else await find_best_sheet_async(large_wb)
+    large_wb = None
+    small_wb = None
+    large_path = await save_upload_to_temp_with_limit(
+        large_file,
+        max_bytes=MAX_EXCEL_BYTES,
+        max_mb=30,
+        prefix="gps_large_",
+        suffix=".xlsx",
     )
-    small_ws = (
-        small_wb[small_sheet]
-        if small_sheet and small_sheet in small_wb.sheetnames
-        else await find_best_sheet_async(small_wb)
+    small_path = await save_upload_to_temp_with_limit(
+        small_file,
+        max_bytes=MAX_EXCEL_BYTES,
+        max_mb=30,
+        prefix="gps_small_",
+        suffix=".xlsx",
     )
 
-    ld = list(large_ws.iter_rows(values_only=True))
-    if not ld:
-        raise HTTPException(status_code=400, detail="الملف الكبير فارغ")
-
-    lh = [str(h).strip() if h is not None else "" for h in ld[0]]
-    lc = large_col.strip() or auto_detect_plate_col(lh)
-
-    if not lc or lc not in lh:
-        raise HTTPException(
-            status_code=422,
-            detail=f"لم يُعثر على عمود اللوحة في الملف الكبير. الأعمدة: {lh}",
-        )
-
-    gps_col = next((h for h in lh if h.strip() == "GPS"), None)
-    if not gps_col:
-        raise HTTPException(
-            status_code=400, detail="لا يوجد عمود GPS في الملف الكبير"
-        )
-
-    date_col  = next((h for h in lh if "تاريخ" in h), None)
-    type_col  = next((h for h in lh if "نوع" in h),   None)
-    notes_col = next((h for h in lh if "ملاحظات" in h), None)
-
-    lci      = lh.index(lc)
-    gps_ci   = lh.index(gps_col)
-    date_ci  = lh.index(date_col)  if date_col  else None
-    type_ci  = lh.index(type_col)  if type_col  else None
-    notes_ci = lh.index(notes_col) if notes_col else None
-
-    lookup = {}
-    for row in ld[1:]:
-        if all(v is None for v in row):
-            continue
-        rp   = row[lci] if lci < len(row) else None
-        norm = normalize_plate(rp)
-        if not norm:
-            continue
-        lookup.setdefault(norm, []).append({
-            "plate":        str(rp or "").strip(),
-            "gps":          _cell_val(row, gps_ci),
-            "date":         _cell_val(row, date_ci),
-            "vehicle_type": _cell_val(row, type_ci),
-            "notes":        _cell_val(row, notes_ci),
-        })
-
-    sd = list(small_ws.iter_rows(values_only=True))
-    if not sd:
-        raise HTTPException(status_code=400, detail="الملف الصغير فارغ")
-
-    sh = [str(h).strip() if h is not None else "" for h in sd[0]]
-    row3 = sd[2] if len(sd) > 2 else None
-    sc = small_col.strip() or auto_detect_plate_col(sh) or auto_detect_plate_col_from_row3(sh, row3)
-
-    if not sc or sc not in sh:
-        raise HTTPException(
-            status_code=422,
-            detail=f"لم يُعثر على عمود اللوحة في الملف الصغير. الأعمدة: {sh}",
-        )
-
-    sci     = sh.index(sc)
-    matched = []
-    seen    = set()
-
-    for row in sd[1:]:
-        if all(v is None for v in row):
-            continue
-        rp   = row[sci] if sci < len(row) else None
-        norm = normalize_plate(rp)
-        if not norm:
-            continue
-        if norm in lookup:
-            for item in lookup[norm]:
-                key = (item["plate"], item["gps"])
-                if key not in seen:
-                    seen.add(key)
-                    matched.append(item)
-
-    if not matched:
-        return JSONResponse({"detail": "لا توجد تطابقات بين الملفين", "vehicles": []})
-
-    # Filter rows that have valid GPS coordinates
-    valid = []
-    for item in matched:
-        gps = item.get("gps", "")
-        if not gps or gps in ("None", "") or "," not in gps:
-            continue
-        parts = gps.split(",")
+    try:
         try:
-            float(parts[0].strip())
-            float(parts[1].strip())
-            valid.append(item)
-        except Exception:
-            continue
+            large_wb = await load_workbook_maybe_encrypted_from_path_async(
+                large_path, password.strip()
+            )
+        except ValueError:
+            logger.exception("Failed to open encrypted large workbook in GPS check")
+            raise HTTPException(
+                status_code=400,
+                detail="An internal error occurred. Please try again.",
+            )
 
-    return JSONResponse({
-        "vehicles": valid,
-        "total":    len(valid),
-        "skipped":  len(matched) - len(valid),
-    })
+        try:
+            small_wb = await load_workbook_from_path_async(small_path)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"تعذّر فتح الملف الصغير: {e}")
+
+        large_ws = (
+            large_wb[large_sheet]
+            if large_sheet and large_sheet in large_wb.sheetnames
+            else await find_best_sheet_async(large_wb)
+        )
+        small_ws = (
+            small_wb[small_sheet]
+            if small_sheet and small_sheet in small_wb.sheetnames
+            else await find_best_sheet_async(small_wb)
+        )
+
+        ld = list(large_ws.iter_rows(values_only=True))
+        if not ld:
+            raise HTTPException(status_code=400, detail="الملف الكبير فارغ")
+
+        lh = [str(h).strip() if h is not None else "" for h in ld[0]]
+        lc = large_col.strip() or auto_detect_plate_col(lh)
+        if not lc or lc not in lh:
+            raise HTTPException(
+                status_code=422,
+                detail=f"لم يُعثر على عمود اللوحة في الملف الكبير. الأعمدة: {lh}",
+            )
+
+        gps_col = next((h for h in lh if h.strip() == "GPS"), None)
+        if not gps_col:
+            raise HTTPException(status_code=400, detail="لا يوجد عمود GPS في الملف الكبير")
+
+        date_col = next((h for h in lh if "تاريخ" in h), None)
+        type_col = next((h for h in lh if "نوع" in h), None)
+        notes_col = next((h for h in lh if "ملاحظات" in h), None)
+
+        lci = lh.index(lc)
+        gps_ci = lh.index(gps_col)
+        date_ci = lh.index(date_col) if date_col else None
+        type_ci = lh.index(type_col) if type_col else None
+        notes_ci = lh.index(notes_col) if notes_col else None
+
+        lookup = {}
+        for row in ld[1:]:
+            if all(v is None for v in row):
+                continue
+            rp = row[lci] if lci < len(row) else None
+            norm = normalize_plate(rp)
+            if not norm:
+                continue
+            lookup.setdefault(norm, []).append(
+                {
+                    "plate": str(rp or "").strip(),
+                    "gps": _cell_val(row, gps_ci),
+                    "date": _cell_val(row, date_ci),
+                    "vehicle_type": _cell_val(row, type_ci),
+                    "notes": _cell_val(row, notes_ci),
+                }
+            )
+
+        sd = list(small_ws.iter_rows(values_only=True))
+        if not sd:
+            raise HTTPException(status_code=400, detail="الملف الصغير فارغ")
+
+        sh = [str(h).strip() if h is not None else "" for h in sd[0]]
+        row3 = sd[2] if len(sd) > 2 else None
+        sc = (
+            small_col.strip()
+            or auto_detect_plate_col(sh)
+            or auto_detect_plate_col_from_row3(sh, row3)
+        )
+        if not sc or sc not in sh:
+            raise HTTPException(
+                status_code=422,
+                detail=f"لم يُعثر على عمود اللوحة في الملف الصغير. الأعمدة: {sh}",
+            )
+
+        sci = sh.index(sc)
+        matched = []
+        seen = set()
+        for row in sd[1:]:
+            if all(v is None for v in row):
+                continue
+            rp = row[sci] if sci < len(row) else None
+            norm = normalize_plate(rp)
+            if not norm:
+                continue
+            if norm in lookup:
+                for item in lookup[norm]:
+                    key = (item["plate"], item["gps"])
+                    if key not in seen:
+                        seen.add(key)
+                        matched.append(item)
+
+        if not matched:
+            return JSONResponse({"detail": "لا توجد تطابقات بين الملفين", "vehicles": []})
+
+        valid = []
+        for item in matched:
+            gps = item.get("gps", "")
+            if not gps or gps in ("None", "") or "," not in gps:
+                continue
+            parts = gps.split(",")
+            try:
+                float(parts[0].strip())
+                float(parts[1].strip())
+                valid.append(item)
+            except Exception:
+                continue
+
+        return JSONResponse(
+            {
+                "vehicles": valid,
+                "total": len(valid),
+                "skipped": len(matched) - len(valid),
+            }
+        )
+    finally:
+        try:
+            if large_wb is not None:
+                large_wb.close()
+        except Exception:
+            pass
+        try:
+            if small_wb is not None:
+                small_wb.close()
+        except Exception:
+            pass
+        try:
+            await asyncio.to_thread(os.unlink, large_path)
+        except OSError:
+            pass
+        try:
+            await asyncio.to_thread(os.unlink, small_path)
+        except OSError:
+            pass
 
 
 @router.post("/parse-ref-plates")
@@ -302,10 +348,15 @@ async def parse_ref_plates(
     file: UploadFile = File(...),
     col:  str        = Form(""),
 ):
-    # SECURITY FIX: file size limit to prevent DoS via large uploads
-    content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
+    tmp_path = await save_upload_to_temp_with_limit(
+        file,
+        max_bytes=MAX_EXCEL_BYTES,
+        max_mb=30,
+        prefix="gps_ref_parse_",
+        suffix=".xlsx",
+    )
     try:
-        wb = await load_workbook_from_bytes_async(content)
+        wb = await load_workbook_from_path_async(tmp_path)
         ws = await find_best_sheet_async(wb)
         rows    = list(ws.iter_rows(values_only=True))
         if not rows:
@@ -352,6 +403,11 @@ async def parse_ref_plates(
             status_code=500,
             detail="An internal error occurred. Please try again.",
         )
+    finally:
+        try:
+            await asyncio.to_thread(os.unlink, tmp_path)
+        except OSError:
+            pass
 
 
 @router.post("/check-ref-plate")
@@ -365,10 +421,15 @@ async def check_ref_plate(
     if not norm_target:
         raise HTTPException(status_code=400, detail="أدخل رقم لوحة صحيح")
 
-    # SECURITY FIX: file size limit to prevent DoS via large uploads
-    content = await read_upload_with_limit(file, MAX_EXCEL_BYTES, 30)
+    tmp_path = await save_upload_to_temp_with_limit(
+        file,
+        max_bytes=MAX_EXCEL_BYTES,
+        max_mb=30,
+        prefix="gps_ref_check_",
+        suffix=".xlsx",
+    )
     try:
-        wb = await load_workbook_from_bytes_async(content)
+        wb = await load_workbook_from_path_async(tmp_path)
         ws = await find_best_sheet_async(wb)
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
@@ -430,6 +491,11 @@ async def check_ref_plate(
             status_code=500,
             detail="An internal error occurred. Please try again.",
         )
+    finally:
+        try:
+            await asyncio.to_thread(os.unlink, tmp_path)
+        except OSError:
+            pass
 
 
 @router.post("/export-gps-excel")

@@ -3,7 +3,7 @@
 This project provides backend-only authentication with:
 
 - Username/password login
-- JWT access + refresh tokens
+- JWT access + refresh tokens (browser: **HttpOnly** cookies `tfg_access` / `tfg_refresh`; set `AUTH_COOKIE_SECURE=true` behind HTTPS; API clients may still send `Authorization: Bearer`)
 - SQLite database
 - Device binding for non-admin users via `X-Device-Id`
 - Admin-only user creation endpoint

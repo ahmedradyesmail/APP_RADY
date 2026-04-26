@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import traceback
 from datetime import datetime, timezone
@@ -26,7 +27,7 @@ from core.excel_loader import (
     lookup_plate,
     merge_workbook_plate_column,
     normalize_plate,
-    parse_excel_workbook,
+    parse_excel_workbook_from_path,
     plate_candidates_from_text,
     union_column_headers,
 )
@@ -40,6 +41,7 @@ from services.provider_key_pool import (
     promote_parked_keys,
 )
 from services.provider_keys import classify_gemini_error
+from services.live_excel_upload_store import pop_upload_path
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +129,7 @@ async def _maybe_live_sheet_check(websocket: WebSocket, session: SessionState) -
     key = normalize_plate(best)
     if len(key) < 3:
         return
-    if key == session.last_live_check_key:
-        return
+    # Allow re-checking the same plate text so user corrections are not suppressed.
     session.last_live_check_key = key
     if session.check_temp_enabled:
         found = await asyncio.to_thread(
@@ -251,8 +252,8 @@ def _parse_plate_payload(blob: str) -> list[dict[str, Any]]:
 def _sanitize_live_plate_text(plate: Any) -> str | None:
     """
     Enforce Live plate constraints:
-    - max 3 Arabic letters
-    - max 4 digits
+    - exactly 3 Arabic letters
+    - exactly 4 digits
     - normalize common over-expanded letter names (e.g. عين/عن -> ع)
     """
     if plate is None:
@@ -273,7 +274,7 @@ def _sanitize_live_plate_text(plate: Any) -> str | None:
 
     if not letters or not digits:
         return None
-    if len(letters) > 3 or len(digits) > 4:
+    if len(letters) != 3 or len(digits) != 4:
         return None
 
     return f"{letters} {digits}"
@@ -408,14 +409,12 @@ async def _emit_plate_result(
 async def _emit_model_plate_if_new(
     websocket: WebSocket, session: SessionState, plate: Any
 ) -> bool:
-    """Deduplicate partial/final model emissions for the same normalized plate(s) per turn."""
+    """Emit model plate result (no per-turn dedupe suppression)."""
     pv = _plate_value_from_entry(plate)
     normalized_plate = _sanitize_live_plate_text(pv)
     if not normalized_plate:
         return False
     key = normalize_plate(normalized_plate)
-    if key and key in session.model_plate_norm_keys:
-        return False
     if key:
         session.model_plate_norm_keys.add(key)
     await _emit_plate_result(websocket, session, normalized_plate)
@@ -443,7 +442,6 @@ async def _process_plate_text(
         await _send(websocket, {"type": "no_plate", "data": {}})
         return
 
-    already_emitted = set(session.model_plate_norm_keys)
     sync_items: list[dict[str, Any]] = []
 
     for entry in valid:
@@ -456,9 +454,7 @@ async def _process_plate_text(
         sync_items.append(
             {"plate": plate_str, "found": found, "moving": moving}
         )
-        key = normalize_plate(raw)
-        if key and key not in already_emitted:
-            await _emit_model_plate_if_new(websocket, session, raw)
+        await _emit_model_plate_if_new(websocket, session, raw)
 
     if sync_items:
         await _emit_check_session_sync(websocket, sync_items)
@@ -475,12 +471,22 @@ async def handle_client_messages(
                 data = json.loads(raw)
                 msg_type = data.get("type")
 
-                if msg_type == "excel_upload":
-                    logger.info("Excel upload received")
+                if msg_type == "excel_upload_ref":
+                    logger.info("Excel upload reference received")
+                    tmp_path = ""
                     try:
                         pw = (data.get("password") or "").strip()
-                        sheets_map, sheet_names = parse_excel_workbook(
-                            data["data"], pw
+                        upload_token = (data.get("upload_token") or "").strip()
+                        tmp_path = pop_upload_path(upload_token) or ""
+                        if not tmp_path:
+                            await _send_error(
+                                websocket,
+                                "انتهت صلاحية مرجع ملف Excel — أعد الرفع.",
+                                "excel_error",
+                            )
+                            continue
+                        sheets_map, sheet_names = parse_excel_workbook_from_path(
+                            tmp_path, pw
                         )
                         if not sheet_names:
                             await _send_error(
@@ -493,7 +499,7 @@ async def handle_client_messages(
                         session.excel_loaded = True
                         union_headers = union_column_headers(sheets_map)
                         logger.info(
-                            "Excel parsed: %s sheets, %s union column titles",
+                            "Excel parsed from temp file: %s sheets, %s union column titles",
                             len(sheet_names),
                             len(union_headers),
                         )
@@ -523,6 +529,12 @@ async def handle_client_messages(
                         await _send_error(
                             websocket, f"خطأ في تحميل الملف: {e}", "excel_error"
                         )
+                    finally:
+                        if tmp_path:
+                            try:
+                                os.unlink(tmp_path)
+                            except OSError:
+                                pass
 
                 elif msg_type == "set_plate_column":
                     col = (data.get("column") or "").strip()
@@ -622,6 +634,8 @@ async def handle_gemini_responses(websocket: WebSocket, session: SessionState) -
                     if "text" in part:
                         session.text_buffer += part["text"]
 
+                # Latency note: plate_result may emit here (partial JSON). turnComplete + _process_plate_text
+                # sends check_session_sync; client also updates session rows on each miss plate_result.
                 # Try early parse on partial chunks (low latency), even before turnComplete.
                 if session.text_buffer.strip():
                     blob_now = _strip_markdown_json_fence(session.text_buffer)

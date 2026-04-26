@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    # HttpOnly cookies for browser auth (tokens not exposed to JavaScript).
+    auth_cookie_access_name: str = "tfg_access"
+    auth_cookie_refresh_name: str = "tfg_refresh"
+    auth_cookie_secure: bool = False
+    auth_cookie_samesite: str = "lax"
     admin_username: str = "admin"
     admin_password: str = "admin123"
     # SECURITY FIX: browser CORS origins loaded from environment.
@@ -27,9 +32,12 @@ class Settings(BaseSettings):
 
     # Optional: shared job status for multi-worker (Gunicorn). If unset, in-memory per worker.
     redis_url: str | None = None
+    # Declared HTTP worker count (Gunicorn/uvicorn). 0 = infer from GUNICORN_WORKERS / WEB_CONCURRENCY / UVICORN_WORKERS.
+    # If effective count > 1, startup requires REDIS_URL (WS tickets + coherent rate limits across processes).
+    app_worker_count: int = 0
 
     # Concurrent Gemini Live WebSocket sessions per process (each holds an upstream WS).
-    gemini_live_max_concurrent: int = 8
+    gemini_live_max_concurrent: int = 150
     # Check (فرز) queue limits (in-process workers).
     check_queue_workers: int = 2
     check_queue_max_depth: int = 200
@@ -37,6 +45,8 @@ class Settings(BaseSettings):
     # Live check workbook cache: keep session alive while active; cleanup after idle.
     check_live_idle_ttl_seconds: int = 30 * 60
     check_live_hard_ttl_seconds: int = 4 * 60 * 60
+    # One-time WS ticket for /ws/check-live (seconds, clamped 15–300 in code).
+    ws_check_live_ticket_ttl_seconds: int = 90
 
     # Optional: Postgres for الفرز large-file storage (RLS by JWT user_id). Empty = legacy two-file temp only.
     check_postgres_url: str = ""
@@ -51,6 +61,22 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
+
+    @property
+    def effective_app_worker_count(self) -> int:
+        """How many app processes serve HTTP (used to require Redis for WS tickets)."""
+        n = int(self.app_worker_count or 0)
+        if n >= 1:
+            return n
+        for key in ("GUNICORN_WORKERS", "WEB_CONCURRENCY", "UVICORN_WORKERS"):
+            raw = os.environ.get(key, "").strip()
+            if raw.isdigit():
+                return max(1, int(raw))
+        return 1
+
+    @property
+    def redis_configured(self) -> bool:
+        return bool((self.redis_url or "").strip())
 
     @property
     def check_postgres_dsn(self) -> str:

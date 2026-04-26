@@ -46,3 +46,7 @@ htmlcov/
 static/lame.min.js
 # ── User Python Base ─────────────────────────────────────
 .pyuserbase/
+
+# ── Temporary Excludes For Web-Only Push ────────────────
+mobile_app/
+docs/

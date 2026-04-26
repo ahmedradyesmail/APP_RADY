@@ -1,12 +1,9 @@
 import asyncio
 import json
 import os
-import tempfile
 import time
-from pathlib import Path
 from datetime import datetime
 
-import aiofiles
 import httpx
 from google import genai
 from google.genai import types
@@ -24,6 +21,11 @@ SYSTEM_INSTRUCTION = """
     Single car: If the speaker gives one plate, then location, then a return-to-street cue like «ونرجع للشارع», keep location_details for «السيارة دي» only in that segment.
     Batch until end: While a batch is active, you may repeat the same location_details for each following plate; when you hear an end cue such as «انتهي», «انتهي السيارات اللي في …», or «نرجع للشارع», stop filling location_details for any plate spoken after that phrase (use null or empty).
     Vehicle type: Put vehicle_type on the same JSON object as that plate's plate_letters / plate_numbers, matching speech where the type usually comes right after the plate for «السيارة دي».
+    Plate format is strict and mandatory:
+    - plate_letters must be exactly 3 Arabic letters (no less, no more).
+    - plate_numbers must be exactly 4 digits (0-9) (no less, no more).
+    - Preserve leading zeros exactly as spoken (e.g. 0129 stays 0129).
+    - If not confident about full 3 letters + 4 digits, leave the plate empty/null rather than guessing.
 """
 
 USER_PROMPT = """
@@ -40,6 +42,11 @@ Output ONLY a JSON array where each object has:
 - "plate_letters": Arabic letters SEPARATED BY SPACES (e.g. "ح أ أ" or "ر س م").
 - "plate_numbers": Numeric part only (e.g. "3108").
 - "vehicle_type": Vehicle description if mentioned, otherwise null.
+Rules:
+- plate_letters MUST be exactly 3 Arabic letters.
+- plate_numbers MUST be exactly 4 digits.
+- Keep leading zeros in plate_numbers.
+- If not confident about all 3 letters and all 4 digits, return plate_letters/plate_numbers as null/empty for that item.
 """
 
 _http_client: httpx.AsyncClient | None = None
@@ -66,6 +73,7 @@ def _get_http_client() -> httpx.AsyncClient:
 
 
 def _detect_mime(filename: str) -> str:
+    """امتداد الملف كما يُرسله المتصفح بعد MediaRecorder (لا رفع ملفات صوتية يدوية)."""
     n = (filename or "").lower()
     if n.endswith(".mp3"):
         return "audio/mpeg"
@@ -75,21 +83,15 @@ def _detect_mime(filename: str) -> str:
         return "audio/ogg"
     if n.endswith((".m4a", ".mp4")):
         return "audio/mp4"
-    if n.endswith(".wav"):
-        return "audio/wav"
-    if n.endswith(".flac"):
-        return "audio/flac"
     if n.endswith((".webm", ".weba")):
         return "audio/webm"
-    if n.endswith(".aac"):
-        return "audio/aac"
     return "audio/webm"
 
 
 def _sniff_audio_mime(file_content: bytes) -> str | None:
     """
-    Infer MIME from magic bytes so uploads match real container (extension often wrong for recordings).
-    Returns None if unknown.
+    MIME من بداية الملف (مهم لتسجيل المتصفح حين يختلف الامتداد عن الحاوية الفعلية).
+    يبقى دعم MP3/WAV/… هنا للتعرّف حتى لو لم يُستخدم امتدادها في _detect_mime.
     """
     b = file_content
     if len(b) < 12:
@@ -107,6 +109,11 @@ def _sniff_audio_mime(file_content: bytes) -> str | None:
     if len(b) >= 12 and b[4:8] == b"ftyp":
         return "audio/mp4"
     return None
+
+
+def _read_file_head(path: str, n: int = 64) -> bytes:
+    with open(path, "rb") as fh:
+        return fh.read(n)
 
 
 def _upload_file_sync(tmp_path: str, api_key: str, gemini_mime: str):
@@ -230,6 +237,7 @@ def _enrich_plates(
     last_street = "غير محدد"
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     mid_street_gps = _mid_gps_from_points(gps_points)
+    out: list[dict] = []
 
     for i, p in enumerate(plates):
         if not p.get("vehicle_type"):
@@ -242,12 +250,15 @@ def _enrich_plates(
 
         letters = " ".join(str(p.get("plate_letters", "")).split())
         numbers = str(p.get("plate_numbers", "")).strip()
-        normalized, _ = normalize_plate_value(
+        normalized, ok = normalize_plate_value(
             letters_raw=letters,
             numbers_raw=numbers,
             full_raw=f"{letters}{numbers}",
         )
-        p["full_plate"] = normalized or f"{letters} {numbers}".strip()
+        if not ok:
+            # Strict filter: skip any plate that isn't exactly 3 letters + 4 digits.
+            continue
+        p["full_plate"] = normalized
 
         if gps_points and i < len(gps_points):
             pt = gps_points[i]
@@ -261,12 +272,13 @@ def _enrich_plates(
         p["recorder_name"] = recorder_name
         p["recording_date"] = now_str
         p["sheet_name"] = sheet_name
+        out.append(p)
 
-    return plates
+    return out
 
 
 async def process_audio(
-    file_content: bytes,
+    file_path: str,
     filename: str,
     api_key: str,
     model_name: str,
@@ -274,18 +286,14 @@ async def process_audio(
     sheet_name: str,
     gps_points: list[dict],
 ) -> list[dict]:
-    """Upload audio to Gemini, extract plates, enrich (لوحات متكررة تُحفظ كما هي)."""
-    suffix = Path(filename).suffix if filename else ".mp3"
-    suffix = (suffix or ".mp3").encode("ascii", "ignore").decode("ascii") or ".mp3"
-    sniffed = _sniff_audio_mime(file_content)
+    """رفع تسجيل من المتصفح (MediaRecorder) إلى Gemini ثم استخراج اللوحات."""
+    tmp_path = (file_path or "").strip()
+    if not tmp_path:
+        raise RuntimeError("missing_audio_file_path")
+    head = await asyncio.to_thread(_read_file_head, tmp_path, 64)
+    sniffed = _sniff_audio_mime(head)
     gemini_mime = sniffed or _detect_mime(filename)
-
-    fd, tmp_path = tempfile.mkstemp(suffix=suffix)
-    os.close(fd)
     try:
-        async with aiofiles.open(tmp_path, "wb") as af:
-            await af.write(file_content)
-
         client, uploaded = await asyncio.to_thread(
             _upload_file_sync, tmp_path, api_key, gemini_mime
         )

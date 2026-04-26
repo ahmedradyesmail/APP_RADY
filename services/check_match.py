@@ -20,6 +20,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from services.plate_utils import (
     auto_detect_plate_col,
+    auto_detect_plate_col_from_rows,
     auto_detect_plate_col_from_row3,
     format_plate_display,
     normalize_plate,
@@ -260,7 +261,21 @@ def run_check_plates_sync(
         sh = [str(h).strip() if h is not None else "" for h in header_s]
         row2 = next(srows, None)
         row3 = next(srows, None)
-        detected_small = auto_detect_plate_col(sh) or auto_detect_plate_col_from_row3(sh, row3)
+        first_rows: list[tuple[Any, ...]] = []
+        if row2 is not None:
+            first_rows.append(row2)
+        if row3 is not None:
+            first_rows.append(row3)
+        while len(first_rows) < 5:
+            nxt = next(srows, None)
+            if nxt is None:
+                break
+            first_rows.append(nxt)
+        detected_small = (
+            auto_detect_plate_col(sh)
+            or auto_detect_plate_col_from_row3(sh, row3)
+            or auto_detect_plate_col_from_rows(sh, first_rows, min_hits=2)
+        )
         sc = small_col.strip() or detected_small
 
         if not sc or sc not in sh:
@@ -336,7 +351,7 @@ def run_check_plates_sync(
             }
         ]
 
-        for row in itertools.chain((r for r in (row2, row3) if r is not None), srows):
+        for row in itertools.chain((r for r in first_rows if r is not None), srows):
             if all(v is None for v in row):
                 continue
             rp = row[sci] if sci < len(row) else None

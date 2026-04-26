@@ -32,6 +32,22 @@ def load_workbook_maybe_encrypted(
         raise ValueError(f"تعذّر فتح الملف: {e}")
 
 
+def load_workbook_maybe_encrypted_from_path(
+    file_path: str, password: str = ""
+) -> openpyxl.Workbook:
+    """
+    Prefer opening workbook directly from disk path to avoid loading full file bytes in RAM.
+    If password is provided, bytes are still needed for decrypt step.
+    """
+    if password:
+        with open(file_path, "rb") as fh:
+            return load_workbook_maybe_encrypted(fh.read(), password)
+    try:
+        return openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+    except Exception as e:
+        raise ValueError(f"تعذّر فتح الملف: {e}")
+
+
 def find_best_sheet(wb: openpyxl.Workbook) -> openpyxl.worksheet.worksheet.Worksheet:
     """Find the sheet that has a plate column, otherwise the largest sheet."""
     best_ws = None
@@ -167,6 +183,14 @@ async def load_workbook_maybe_encrypted_async(
     )
 
 
+async def load_workbook_maybe_encrypted_from_path_async(
+    file_path: str, password: str = ""
+) -> openpyxl.Workbook:
+    return await asyncio.to_thread(
+        load_workbook_maybe_encrypted_from_path, file_path, password
+    )
+
+
 async def find_best_sheet_async(wb: openpyxl.Workbook):
     return await asyncio.to_thread(find_best_sheet, wb)
 
@@ -182,5 +206,14 @@ async def load_workbook_from_bytes_async(
         return openpyxl.load_workbook(
             io.BytesIO(content), read_only=read_only, data_only=data_only
         )
+
+    return await asyncio.to_thread(_load)
+
+
+async def load_workbook_from_path_async(
+    file_path: str, read_only: bool = True, data_only: bool = True
+) -> openpyxl.Workbook:
+    def _load() -> openpyxl.Workbook:
+        return openpyxl.load_workbook(file_path, read_only=read_only, data_only=data_only)
 
     return await asyncio.to_thread(_load)

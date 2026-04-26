@@ -229,7 +229,7 @@ async function omDeleteStoredImport(id){
 
 async function omFetchCheckCapabilities(){
   try{
-    const r=await fetch('/api/check/capabilities');
+    const r=await fetch('/api/check/capabilities',{credentials:'include'});
     if(!r.ok){ omPostgresLargeEnabled=false; return; }
     const j=await r.json();
     omPostgresLargeEnabled=!!j.postgres_large_enabled;
@@ -280,7 +280,7 @@ async function omImportLargeToServer(){
     var fd=new FormData();
     fd.append('large_file',omCheckLargeFile);
     var pw=document.getElementById('omLargePw').value.trim(); if(pw) fd.append('password',pw);
-    var lc=document.getElementById('omLargeCol').value.trim(); if(lc) fd.append('large_col',lc);
+    var lc=document.getElementById('omLargeCol').value.trim()||omFixedLargePlateHeader(); fd.append('large_col',lc);
     var r=await fetch('/api/check/import-large',{method:'POST',body:fd});
     var j=await r.json().catch(function(){return{};});
     if(!r.ok) throw new Error(j.detail||r.statusText||'\u0641\u0634\u0644 \u0627\u0644\u0627\u0633\u062A\u064A\u0631\u0627\u062F');
@@ -314,7 +314,7 @@ async function omUploadLargeToTempIfNeeded(){
   fd.append('session_token',token);
   fd.append('large_file',omCheckLargeFile);
   const pw=document.getElementById('omLargePw').value.trim(); if(pw) fd.append('password',pw);
-  const lc=document.getElementById('omLargeCol').value.trim(); if(lc) fd.append('large_col',lc);
+  const lc=document.getElementById('omLargeCol').value.trim()||omFixedLargePlateHeader(); fd.append('large_col',lc);
   const r=await fetch('/api/check/temp/upload-large',{method:'POST',body:fd});
   const j=await r.json().catch(function(){return{};});
   if(!r.ok) throw new Error(j.detail||r.statusText||'فشل رفع الملف الكبير المؤقت');
@@ -347,7 +347,7 @@ async function omRunTempTextCheck(){
 }
 
 document.addEventListener('DOMContentLoaded',async function(){
-  omFetchCheckCapabilities();
+  /* omFetchCheckCapabilities: بعد probeAuth/تسجيل الدخول (index) لتجنب طلب /capabilities قبل تحديث الكوكيز أو بالتوازي مع refresh */
   try{
     var tok=localStorage.getItem('omTempCheckSessionToken')||'';
     if(tok) omTempCheckSessionToken=tok;
@@ -365,6 +365,10 @@ window.addEventListener('om-auth-state-changed',function(e){
   }
   omFetchCheckCapabilities();
 });
+/** عمود اللوحة في الملف الكبير ثابت في المخزن (Postgres)؛ للملف المحلي يُحدَّد من اكتشاف الترويسة في الحقل المخفي omLargeCol */
+function omFixedLargePlateHeader(){
+  return '\u0631\u0642\u0645 \u0627\u0644\u0644\u0648\u062D\u0629';
+}
 function omColId(side){ return side==='large'?'omLargeCol':'omSmallCol'; }
 function omColBadgeId(side){ return side==='large'?'omLargeColBadge':'omSmallColBadge'; }
 function omShowFieldStatus(type,txt,spin=false){
@@ -435,7 +439,7 @@ async function omOnCheckFileChange(file,side){
     omCheckLargeFile=file;
     document.getElementById('omLargeFname').textContent='📎 '+file.name;
     document.getElementById('omRemoveLargeBtn').classList.add('show');
-    if(!document.getElementById('omLargeCol').value.trim())omSetBadge('large','pending','...');
+    omSetBadge('large','pending','...');
     omCheckResultBlob=null;
     document.getElementById('omResultBox').classList.remove('show');
     if(typeof omRenderCheckMatchPreview==='function') omRenderCheckMatchPreview(null);
@@ -681,11 +685,17 @@ function omRemoveCheckFile(side){
   omResetCheckDetect();omCheckRunReady();
 }
 function omResetColDropdown(side){
+  if(side==='large'){
+    const h=document.getElementById('omLargeCol');
+    if(h&&h.tagName==='INPUT') h.value=omFixedLargePlateHeader();
+    return;
+  }
   const sel=document.getElementById(omColId(side));
   if(!sel)return;
   sel.innerHTML='<option value="">اختر عموداً…</option>';
 }
 function omFillColDropdown(side,headers,selectedVal){
+  if(side==='large') return;
   const sel=document.getElementById(omColId(side));
   if(!sel)return;
   const prev=(selectedVal||sel.value||'').trim();
@@ -707,7 +717,10 @@ function omResetCheckDetect(){
   if(typeof omRenderCheckMatchPreview==='function') omRenderCheckMatchPreview(null);
   document.getElementById('omResultBox').classList.remove('show');
   document.getElementById('omFieldHeadersHint').style.display='none';
-  ['large','small'].forEach(s=>{if(!document.getElementById(omColId(s)).value.trim())omSetBadge(s,'pending','\u2014');});
+  ['large','small'].forEach(function(s){
+    if(s==='large') return;
+    if(!document.getElementById(omColId(s)).value.trim())omSetBadge(s,'pending','\u2014');
+  });
 }
 function omOnManualColInput(side){const val=document.getElementById(omColId(side)).value.trim();omSetBadge(side,val?'found':'pending',val?'\u25BE \u0645\u062E\u062A\u0627\u0631':'\u2014');if(!val)omAutoDetectCols();omCheckRunReady();}
 function omSetBadge(side,state,text){const b=document.getElementById(omColBadgeId(side));b.className='detect-badge '+state;b.textContent=text;}
@@ -733,8 +746,8 @@ async function omDetectColForSide(side){
         return;
       }
       omHasStoredImports=true;
-      omFillColDropdown('large',j.headers,document.getElementById('omLargeCol').value.trim());
-      document.getElementById('omLargeCol').value='';
+      var hlc=document.getElementById('omLargeCol');
+      if(hlc&&hlc.tagName==='INPUT') hlc.value=omFixedLargePlateHeader();
       omSetBadge('large','found','\u2714 \u0645\u062E\u0632\u0651\u0646 ('+String(j.row_count||0)+' \u0635\u0641)');
       omCheckLargeHasGps=!!(j.headers&&j.headers.indexOf('GPS')!==-1);
       const gs=document.getElementById('omGpsMatchSection');
@@ -781,12 +794,22 @@ async function omDetectColForSide(side){
     }
     if(side==='large') omLargeNeedsPassword=false;
     omFillColDropdown(side,info.headers||[],document.getElementById(omColId(side)).value.trim());
-    if(info.detected&&!document.getElementById(omColId(side)).value.trim()){
-      document.getElementById(omColId(side)).value=info.detected;
+    const colEl=document.getElementById(omColId(side));
+    const curTrim=(colEl.value||'').trim();
+    var applyDetected=false;
+    if(info.detected){
+      if(side==='large'&&colEl.tagName==='INPUT'){
+        applyDetected=!curTrim||curTrim===omFixedLargePlateHeader();
+      }else{
+        applyDetected=!curTrim;
+      }
+    }
+    if(applyDetected){
+      colEl.value=info.detected;
       if(side==='large')omCheckDetected.large=info.detected;
       else omCheckDetected.small=info.detected;
       omSetBadge(side,'found','✔ تلقائي');
-    } else if(document.getElementById(omColId(side)).value.trim()){
+    } else if((colEl.value||'').trim()){
       omSetBadge(side,'found','▾ مختار');
     } else if(!info.detected){
       omSetBadge(side,'notfound','؟ غير مكتشف');
@@ -868,7 +891,7 @@ async function omRunMatch(){
       fd.append('small_file',omCheckSmallFile);
     }
     const pw=document.getElementById('omLargePw').value.trim();if(pw)fd.append('password',pw);
-    const lc=document.getElementById('omLargeCol').value.trim();if(lc)fd.append('large_col',lc);
+    const lc=document.getElementById('omLargeCol').value.trim()||omFixedLargePlateHeader(); fd.append('large_col',lc);
     const sc=document.getElementById('omSmallCol').value.trim();if(sc)fd.append('small_col',sc);
     fd.append('large_export_cols_json',omGetCheckExportColsJson('large'));
     fd.append('small_export_cols_json',omGetCheckExportColsJson('small'));
@@ -979,6 +1002,41 @@ function omMatchPreviewColClass(header){
   if(/\u0645\u0644\u0627\u062D\u0638\u0627\u062A/.test(t)) return 'om-xls-col-notes';
   return '';
 }
+/** تطبيع رقم اللوحة لمقارنة التكرار (يفضّل normPlate من الصفحة إن وُجدت) */
+function omNormPlateDupKey(v){
+  try{ if(typeof normPlate==='function') return normPlate(v); }catch(_){}
+  var s=String(v==null?'':v).trim();
+  s=s.replace(/[\s\u200b\u200c\u200d\ufeff]+/g,'');
+  s=s.replace(/[\u0623\u0625\u0622\u0671]/g,'\u0627');
+  s=s.replace(/[\u0649]/g,'\u064a');
+  s=s.replace(/[\u0629]/g,'\u0647');
+  return s.toLowerCase();
+}
+/** عدّ تكرار كل لوحة (عبر كل أقسام المعاينة) في خلايا أعمدة اللوحة فقط */
+function omBumpPlateDupCountsFromRows(rows,hdrs,srcs,sec,previewRoot,counts){
+  (rows||[]).forEach(function(row){
+    (row||[]).forEach(function(cell,idx){
+      var h=hdrs[idx]==null?'':String(hdrs[idx]);
+      if(!omMatchPreviewIsPlateColumn(idx,h,srcs||[],sec,previewRoot)) return;
+      var k=omNormPlateDupKey(cell);
+      if(!k) return;
+      counts[k]=(counts[k]||0)+1;
+    });
+  });
+}
+function omCollectPlateDupCounts(preview){
+  var counts={};
+  if(!preview) return counts;
+  var secs=preview.sections;
+  if(secs&&secs.length){
+    secs.forEach(function(sec){
+      omBumpPlateDupCountsFromRows(sec.rows||[],sec.headers||[],sec.col_sources||[],sec,preview,counts);
+    });
+  }else{
+    omBumpPlateDupCountsFromRows(preview.rows||[],preview.headers||[],preview.col_sources||[],null,preview,counts);
+  }
+  return counts;
+}
 /** معاينة الويب: عمود اللوحة (كبير/صغير) — يعتمد على plate_column_indices من الخادم ثم أسماء القوائم */
 function omMatchPreviewIsPlateColumn(idx,header,srcs,sec,previewRoot){
   if(sec&&Array.isArray(sec.plate_column_indices)&&sec.plate_column_indices.indexOf(idx)!==-1) return true;
@@ -998,7 +1056,7 @@ function omMatchPreviewIsPlateColumn(idx,header,srcs,sec,previewRoot){
   if(sc&&s==='small'&&hn===omNormHeaderForSim(sc)) return true;
   return false;
 }
-function omAppendMatchExcelSheet(host,sec,previewRoot){
+function omAppendMatchExcelSheet(host,sec,previewRoot,dupCounts){
   var block=document.createElement('div');
   block.className='om-xls-sheet';
   var bar=document.createElement('div');
@@ -1032,7 +1090,11 @@ function omAppendMatchExcelSheet(host,sec,previewRoot){
       var td=document.createElement('td');
       var cls=[];
       if(srcs[idx]==='small') cls.push('om-xls-small');
-      if(omMatchPreviewIsPlateColumn(idx,hdrs[idx],srcs,sec,previewRoot)) cls.push('om-xls-plate');
+      if(omMatchPreviewIsPlateColumn(idx,hdrs[idx],srcs,sec,previewRoot)){
+        cls.push('om-xls-plate');
+        var dk=omNormPlateDupKey(cell);
+        if(dk&&dupCounts&&dupCounts[dk]>1) cls.push('om-plate-dup');
+      }
       var nc2=omMatchPreviewColClass(hdrs[idx]);
       if(nc2) cls.push(nc2);
       td.className=cls.filter(Boolean).join(' ');
@@ -1069,7 +1131,8 @@ function omRenderCheckMatchPreview(preview){
     tbody.innerHTML='';
     host.className='om-match-preview-host';
     host.style.display='flex';
-    secs.forEach(function(s){ omAppendMatchExcelSheet(host,s,preview); });
+    var dupA=omCollectPlateDupCounts(preview);
+    secs.forEach(function(s){ omAppendMatchExcelSheet(host,s,preview,dupA); });
     if(note){
       if(preview.truncated){
         note.textContent='عرض أول '+preview.rows.length+' صف من أصل '+preview.total_rows+' — الملف الكامل عند الفتح في Excel.';
@@ -1087,13 +1150,14 @@ function omRenderCheckMatchPreview(preview){
     tbody.innerHTML='';
     host.className='om-match-preview-host';
     host.style.display='flex';
+    var dupB=omCollectPlateDupCounts(preview);
     omAppendMatchExcelSheet(host,{
       title:'معاينة التطابق',
       headers:preview.headers,
       col_sources:preview.col_sources||[],
       plate_column_indices:preview.plate_column_indices||[],
       rows:preview.rows||[]
-    },preview);
+    },preview,dupB);
     if(note){
       if(preview.truncated){
         note.textContent='عرض أول '+preview.rows.length+' صف من أصل '+preview.total_rows+' — الملف الكامل عند الفتح في Excel.';
@@ -1127,13 +1191,18 @@ function omRenderCheckMatchPreview(preview){
   }
   thead.innerHTML='<tr>'+preview.headers.map(function(h,i){ return '<th'+thCls(i)+'>'+esc(h)+'</th>'; }).join('')+'</tr>';
   tbody.innerHTML='';
+  var dupC=omCollectPlateDupCounts(preview);
   preview.rows.forEach(function(row){
     var tr=document.createElement('tr');
     row.forEach(function(cell,idx){
       var td=document.createElement('td');
       var pc=['td-gps'];
       if(srcs[idx]==='small') pc.push('om-match-col-small');
-      if(omMatchPreviewIsPlateColumn(idx,preview.headers[idx],srcs,null,preview)) pc.push('om-match-col-plate');
+      if(omMatchPreviewIsPlateColumn(idx,preview.headers[idx],srcs,null,preview)){
+        pc.push('om-match-col-plate');
+        var dk=omNormPlateDupKey(cell);
+        if(dk&&dupC[dk]>1) pc.push('om-plate-dup');
+      }
       var x2=omMatchPreviewColClass(preview.headers[idx]);
       if(x2) pc.push(x2);
       td.className=pc.filter(Boolean).join(' ');
@@ -1255,7 +1324,7 @@ async function omRunGpsNearestAfterMatch(){
     } else {
       fd.append('large_file',omCheckLargeFile);fd.append('small_file',omCheckSmallFile);
       const pw=document.getElementById('omLargePw').value.trim();if(pw)fd.append('password',pw);
-      const lc=document.getElementById('omLargeCol').value.trim();if(lc)fd.append('large_col',lc);
+      const lc=document.getElementById('omLargeCol').value.trim()||omFixedLargePlateHeader(); fd.append('large_col',lc);
       const sc=document.getElementById('omSmallCol').value.trim();if(sc)fd.append('small_col',sc);
       res=await fetch('/api/check-gps-data',{method:'POST',body:fd});
     }

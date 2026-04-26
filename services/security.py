@@ -1,4 +1,5 @@
 import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -25,6 +26,8 @@ def create_token(subject: str, token_type: str, expires_delta: timedelta) -> str
         "type": token_type,
         "iat": now,
         "exp": now + expires_delta,
+        # Unique per issuance so parallel logins / same-second refresh never collide on token_hash.
+        "jti": secrets.token_urlsafe(24),
     }
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
